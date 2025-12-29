@@ -1,25 +1,20 @@
-# ---------- Builder ----------
-FROM python:3.10 AS builder
-
-WORKDIR /build
-
-COPY requirements.txt .
-
-RUN pip wheel --no-cache-dir -r requirements.txt
-
-# ---------- Runtime ----------
 FROM python:3.10-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV MLFLOW_TRACKING_URI=sqlite:////app/mlflow.db
 
 WORKDIR /app
 
-COPY --from=builder /build /wheels
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir /wheels/*.whl \
-    && rm -rf /wheels
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/ src/
+COPY . .
 
-ENV PYTHONPATH=/app
 EXPOSE 5000
 
 CMD ["python", "src/model_serving/app.py"]

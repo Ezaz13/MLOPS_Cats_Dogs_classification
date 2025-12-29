@@ -31,3 +31,4 @@ prefect
 pytest
 flake8
 mlflow-skinny
+gunicorn
