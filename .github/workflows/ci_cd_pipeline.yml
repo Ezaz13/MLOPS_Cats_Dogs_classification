@@ -1,0 +1,82 @@
+name: Heart Disease Prediction CI/CD
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-test-train:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.9"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Assuming requirements.txt exists in root. If not, we install packages manually.
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        # Explicitly install test dependencies if not in requirements.txt
+        pip install pytest flake8 prefect mlflow scikit-learn pandas numpy matplotlib seaborn great_expectations
+
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 src tests --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 src tests --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Run Unit Tests
+      run: |
+        # Run pytest and discover tests in the 'tests' directory
+        pytest tests/
+
+    - name: Execute Data Pipeline & Model Training
+      run: |
+        # We run the orchestrator script. 
+        # This runs Ingestion -> Validation -> Prep -> Transform -> Model Building
+        # Note: This assumes the raw data exists in the repo or is downloaded by ingestion.
+        # If ingestion downloads from an external source, ensure credentials are set.
+        # If raw data is local and not in git, this step might fail without a data artifact download step.
+        
+        # For this assignment context, we assume data/raw/uci exists or ingestion handles it.
+        python src/data_pipeline_orchestrator/pipeline.py
+      env:
+        # Set environment variables if needed (e.g., for MLflow or Prefect)
+        PYTHONIOENCODING: "utf-8"
+
+    - name: Archive Model Performance Report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: model-performance-report
+        path: src/model_building/model_performance_report.md
+
+    - name: Archive MLflow Runs
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: mlflow-runs
+        path: mlruns/
+
+    - name: Archive Logs
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: pipeline-logs
+        path: logs/
+
+    - name: Archive Validation Reports
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: validation-reports
+        path: reports/
