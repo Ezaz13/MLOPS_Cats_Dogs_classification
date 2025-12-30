@@ -57,8 +57,8 @@ def run_script(script_path: Path, task_name: str, upstream_result: Any = None) -
         # No need to log stderr as it will have already been printed to the console.
         raise  # Re-raise the exception to make the Prefect task fail
 
-@flow(name="DMML End-to-End Pipeline")
-def dmml_pipeline():
+@flow(name="MLOPS End-to-End Pipeline")
+def mlops_pipeline():
     """
     The main Prefect flow that orchestrates the entire data pipeline.
     This function defines the DAG by calling tasks sequentially.
@@ -71,7 +71,6 @@ def dmml_pipeline():
     validation_script = PROJECT_ROOT / "src" / "data_validation" / "validation.py"
     preparation_script = PROJECT_ROOT / "src" / "data_preparation" / "preparation.py"
     transformation_script = PROJECT_ROOT / "src" / "data_transformation" / "transformation.py"
-    versioning_script = PROJECT_ROOT / "src" / "data_versioning" / "version_data.py"
     model_building_script = PROJECT_ROOT / "src" / "model_building" / "train_model.py"
 
     # Execute the DAG sequentially. Prefect waits for each task to complete.
@@ -79,12 +78,11 @@ def dmml_pipeline():
     validation_result = run_script(script_path=validation_script, task_name="Data Validation", upstream_result=ingestion_result)
     preparation_result = run_script(script_path=preparation_script, task_name="Data Preparation", upstream_result=validation_result)
     transformation_result = run_script(script_path=transformation_script, task_name="Data Transformation", upstream_result=preparation_result)
-    # versioning_result = run_script(script_path=versioning_script, task_name="Data Versioning", upstream_result=transformation_result)
     model_building_result = run_script(script_path=model_building_script, task_name="Model Building", upstream_result=transformation_result)
 
     logger.info("====== Prefect Pipeline Flow Finished Successfully ======")
 
 if __name__ == "__main__":
-    dmml_pipeline()
+    mlops_pipeline()
     print("\nPipeline execution complete. Check the logs for task status.")
     print("For a richer UI and history, serve your flows with 'prefect server start' and deploy your flow.")

@@ -17,7 +17,7 @@ from flask import Response
 BASE_DIR = pathlib.Path(__file__).resolve().parents[2]
 
 
-# ✅ Use environment variable if set (useful for Docker), otherwise fallback to local sqlite
+# Use environment variable if set (useful for Docker), otherwise fallback to local sqlite
 tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
 mlflow.set_tracking_uri(tracking_uri)
 

@@ -67,7 +67,7 @@ datasets = [
     # 9. Bradycardia & Depression (Low HR)
     {
         "age": 65, "sex": 1, "cp": 3, "trestbps": 160, "chol": 220,
-        "fbs": 0, "restecg": 2, "thalach": 110, "exang": 1,
+        "fbs": 0, "restecg": "ab", "thalach": 110, "exang": 1,
         "oldpeak": 3.0, "slope": 2, "ca": 2, "thal": 2
     },
     # 10. Average Middle-Aged Male
@@ -79,7 +79,7 @@ datasets = [
 ]
 
 def run_tests():
-    print(f"\n🚀 Testing Model Serving at {API_URL}...")
+    print(f"\nTesting Model Serving at {API_URL}...")
     print("=" * 75)
     print(f"{'Case':<5} | {'Prediction':<15} | {'Confidence':<12} | {'Status':<10}")
     print("-" * 75)
@@ -90,18 +90,18 @@ def run_tests():
             
             if response.status_code == 200:
                 result = response.json()[0]
-                pred_label = "🔴 High Risk" if result['prediction'] == 1 else "🟢 Low Risk"
+                pred_label = "High Risk" if result['prediction'] == 1 else "Low Risk"
                 conf_label = f"{result['confidence']:.2%}"
-                status = "✅ OK"
+                status = " OK"
             else:
                 pred_label = "N/A"
                 conf_label = "N/A"
-                status = f"❌ {response.status_code}"
+                status = f"{response.status_code}"
                 
             print(f"{i:<5} | {pred_label:<15} | {conf_label:<12} | {status:<10}")
             
         except requests.exceptions.ConnectionError:
-            print(f"\n❌ Error: Could not connect to {API_URL}.")
+            print(f"\n Error: Could not connect to {API_URL}.")
             print("   Make sure the Flask app is running (python src/model_serving/app.py)")
             break
         except Exception as e:
