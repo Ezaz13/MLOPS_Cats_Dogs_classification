@@ -14,7 +14,8 @@ spec:
     spec:
       containers:
       - name: heart-disease-app
-        image: ezaz13/heart-disease-app:main
+        image: ezaz13/heart-disease-app:v20
+
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5000
