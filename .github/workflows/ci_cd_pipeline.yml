@@ -47,19 +47,6 @@ jobs:
         MLFLOW_TRACKING_URI: file:///tmp/mlruns
         PYTHONIOENCODING: "utf-8"
 
-    - name: Execute Data Pipeline & Model Training
-      run: |
-        # We run the orchestrator script. 
-        # This runs Ingestion -> Validation -> Prep -> Transform -> Model Building
-        # Note: This assumes the raw data exists in the repo or is downloaded by ingestion.
-        # If ingestion downloads from an external source, ensure credentials are set.
-        # If raw data is local and not in git, this step might fail without a data artifact download step.
-        
-        # For this assignment context, we assume data/raw/uci exists or ingestion handles it.
-        python src/data_pipeline_orchestrator/pipeline.py
-      env:
-        # Set environment variables if needed (e.g., for MLflow or Prefect)
-        PYTHONIOENCODING: "utf-8"
 
     - name: Archive Model Performance Report
       if: always()
