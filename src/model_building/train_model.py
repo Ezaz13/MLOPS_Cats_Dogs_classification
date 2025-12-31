@@ -52,10 +52,7 @@ EXPERIMENT_NAME = "Heart Disease Prediction"
 REGISTERED_MODEL_NAME = "HeartDiseaseModel"
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-def init_mlflow():
-    mlflow.set_experiment(EXPERIMENT_NAME)
-
-
+mlflow.set_experiment(EXPERIMENT_NAME)
 # ------------------------------------------------------------------
 # Data Preparation
 # ------------------------------------------------------------------
@@ -217,8 +214,9 @@ def main():
                 "problem_type": "binary_classification"
             })
 
+            # Log & Register model
             mlflow.sklearn.log_model(
-                pipeline,
+                sk_model=pipeline,
                 artifact_path="model",
                 input_example=X_train.head(5)
             )
@@ -229,8 +227,8 @@ def main():
                 "run_id": run.info.run_id
             }
 
-            if metrics["cv_roc_auc"] > best_score:
-                best_score = metrics["cv_roc_auc"]
+            if metrics["f1"] > best_score:
+                best_score = metrics["f1"]
                 best_run_id = run.info.run_id
                 best_model_name = name
 
@@ -247,5 +245,4 @@ def main():
 
 # ------------------------------------------------------------------
 if __name__ == "__main__":
-    init_mlflow()
     main()

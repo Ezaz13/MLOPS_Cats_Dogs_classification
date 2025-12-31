@@ -1,12 +1,12 @@
 # Model Performance Report
 
-*Report generated on: 2025-12-31 11:40:34*
+*Report generated on: 2025-12-31 23:03:42*
 
 *MLflow Experiment: 'Heart Disease Prediction'*
 
 ## Logistic Regression
 
-- **MLflow Run ID**: `b65b9562b7f842e59f5a046d8caec495`
+- **MLflow Run ID**: `eb4b22941c444841847d09cad36542ac`
 - **Best Params**: `{'C': 0.1, 'solver': 'liblinear'}`
 - **CV ROC-AUC (Mean)**: 0.9009
 - **Test Accuracy**: 0.8689
@@ -17,7 +17,7 @@
 
 ## Random Forest
 
-- **MLflow Run ID**: `6d42bdc27e6e40848a30c6b0461eea3b`
+- **MLflow Run ID**: `4354ebaa84d64e0a9684c36f85a36381`
 - **Best Params**: `{'n_estimators': 100, 'max_depth': 10}`
 - **CV ROC-AUC (Mean)**: 0.8840
 - **Test Accuracy**: 0.8852
@@ -28,7 +28,7 @@
 
 ## Gradient Boosting
 
-- **MLflow Run ID**: `b3f8b943a6ee42f5b08b10c0f4e0a713`
+- **MLflow Run ID**: `9cd986fb7893442e897d50d9dfb5fe2d`
 - **Best Params**: `{'n_estimators': 150, 'learning_rate': 0.05}`
 - **CV ROC-AUC (Mean)**: 0.8528
 - **Test Accuracy**: 0.8689

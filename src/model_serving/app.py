@@ -16,11 +16,10 @@ from flask import Response
 # -------------------------------------------------
 BASE_DIR = pathlib.Path(__file__).resolve().parents[2]
 
-
 # Use environment variable if set (useful for Docker), otherwise fallback to local sqlite
-tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
+database_path = BASE_DIR / "mlflow.db"
+tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", f"sqlite:///{database_path}")
 mlflow.set_tracking_uri(tracking_uri)
-
 
 MODEL_URI = "models:/HeartDiseaseModel/latest"
 
@@ -34,57 +33,66 @@ metrics = PrometheusMetrics(app)
 # Categorical features used during training
 CATEGORICAL_FEATURES = ["thal"]
 
+
 # -------------------------------------------------
 # Load model
 # -------------------------------------------------
 def load_model():
     global model
     try:
+        app.logger.info(f"Attempting to load model from URI: {MODEL_URI}")
         model = mlflow.sklearn.load_model(MODEL_URI)
-        app.logger.info(f"Model loaded from {MODEL_URI}")
+        app.logger.info(f"Successfully loaded model from {MODEL_URI}")
     except Exception as e:
         app.logger.warning(f"Standard load failed: {e}. Attempting path correction for Docker...")
         try:
             client = MlflowClient()
             # Parse model name from URI "models:/HeartDiseaseModel/latest"
             model_name = MODEL_URI.split("/")[1]
-            
+            app.logger.info(f"Querying MLflow Registry for model: {model_name}")
+
             # Get latest version info
             versions = client.get_latest_versions(model_name, stages=["None", "Staging", "Production"])
+            app.logger.info(f"Versions found: {[(v.version, v.current_stage, v.run_id) for v in versions]}")
+
             if not versions:
                 raise Exception("No versions found")
             latest_version = max(versions, key=lambda x: int(x.version))
-            
+            app.logger.info(
+                f"Selected Version: {latest_version.version} (Stage: {latest_version.current_stage}) Run ID: {latest_version.run_id}")
+
             # Fix path: Replace host absolute path with Docker container path
             source = latest_version.source
-            
+            app.logger.info(f"Original source path from registry: {source}")
+
             # Fallback: If source is abstract (e.g. models:/...), fetch the physical path from the run
             if "mlruns" not in source and "models:/" in source:
+                app.logger.info(f"Source URI is abstract. Fetching run info...")
                 run = client.get_run(latest_version.run_id)
                 source = run.info.artifact_uri
-                app.logger.info(f"Source was abstract, switched to run artifact URI: {source}")
+                app.logger.info(f"Resolved run artifact URI: {source}")
 
             # Robust path correction for Docker (Windows host -> Linux container)
             # 1. Normalize slashes and remove file:// prefix
             source_norm = source.replace("\\", "/").replace("file://", "")
-            
+
             docker_path = None
             idx = source_norm.find("mlruns")
             if idx != -1:
                 # Extract everything after 'mlruns' and join with container path
                 rel_path = source_norm[idx + 6:].lstrip("/")
                 docker_path = os.path.join("/app/mlruns", rel_path).rstrip("/.")
-            
+
             # Robust Search: Find the actual directory containing 'MLmodel'
             final_model_path = None
-            
+
             # Strategy 1: Check if the constructed path or its subdirectories contain the model
             if docker_path and os.path.exists(docker_path):
                 for root, dirs, files in os.walk(docker_path):
                     if "MLmodel" in files:
                         final_model_path = root
                         break
-            
+
             # Strategy 2: Search for any directory containing 'MLmodel' that matches this run
             if not final_model_path:
                 app.logger.info(f"Searching /app/mlruns for MLmodel...")
@@ -103,6 +111,7 @@ def load_model():
             model = None
             app.logger.error(f"Failed to load model: {e2}")
 
+
 # -------------------------------------------------
 # UI
 # -------------------------------------------------
@@ -111,9 +120,11 @@ def load_model():
 def metrics_endpoint():
     return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
+
 @app.route("/", methods=["GET"])
 def index():
     return render_template("index.html")
+
 
 # -------------------------------------------------
 # Health
@@ -125,6 +136,7 @@ def health():
         "model_loaded": model is not None,
         "model_uri": MODEL_URI
     })
+
 
 # -------------------------------------------------
 # Prediction
@@ -161,7 +173,6 @@ def predict():
         # ---------------------------------------------------------
         df['rate_pressure_product'] = df['trestbps'] * df['thalach']
         df['chol_fbs_interaction'] = df['chol'] * df['fbs']
-        df['is_high_risk'] = 0
 
         # ---------------------------------------------------------
         # 3. One-Hot Encoding & Alignment

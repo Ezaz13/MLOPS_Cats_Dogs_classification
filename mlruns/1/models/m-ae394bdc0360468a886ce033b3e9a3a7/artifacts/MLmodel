@@ -1,4 +1,4 @@
-artifact_path: file:///F:/Bits/Semester_3/Third Semester/MLOPS/Assignment/Heart-Disease-Prediction-Project/mlruns/1/models/m-e9da3cee62a04abc8698d3cfbd711c1e/artifacts
+artifact_path: file:///F:/Bits/Semester_3/Third Semester/MLOPS/Assignment/Heart-Disease-Prediction-Project/mlruns/1/models/m-ae394bdc0360468a886ce033b3e9a3a7/artifacts
 flavors:
   python_function:
     env:
@@ -15,11 +15,11 @@ flavors:
     sklearn_version: 1.3.2
 is_signature_from_type_hint: false
 mlflow_version: 3.8.1
-model_id: m-e9da3cee62a04abc8698d3cfbd711c1e
-model_size_bytes: 9121
-model_uuid: m-e9da3cee62a04abc8698d3cfbd711c1e
+model_id: m-ae394bdc0360468a886ce033b3e9a3a7
+model_size_bytes: 781768
+model_uuid: m-ae394bdc0360468a886ce033b3e9a3a7
 prompts: null
-run_id: b65b9562b7f842e59f5a046d8caec495
+run_id: 4354ebaa84d64e0a9684c36f85a36381
 saved_input_example_info:
   artifact_path: input_example.json
   pandas_orient: split
@@ -52,4 +52,4 @@ signature:
   outputs: '[{"type": "integer", "required": true}]'
   params: null
 type_hint_from_example: false
-utc_time_created: '2025-12-31 06:10:00.474739'
+utc_time_created: '2025-12-31 17:33:36.425549'
