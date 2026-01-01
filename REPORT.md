@@ -242,3 +242,8 @@ Managed via **GitHub Actions** (`.github/workflows/ci_cd_pipeline.yml`).
 ## 6. Link to Code Repository
 
 [https://github.com/Ezaz13/MLOPS-Heart-Disease.git](https://github.com/Ezaz13/MLOPS-Heart-Disease.git)
+
+
+## 6. Link to Application walkthrough recording
+
+https://wilpbitspilaniacin0-my.sharepoint.com/:v:/g/personal/2024aa05083_wilp_bits-pilani_ac_in/IQByKQZjA01pTZDbOenZWesFAWihpS3Pcps-bkGT9a37-tg?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=2EyaNt
