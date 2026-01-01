@@ -1,7 +1,7 @@
 # MLOps Assignment Report
 # Title: Heart Disease UCI Dataset
 
-**Group 130**
+# Group 130
 
 | Sl. No. | Name | BITS ID | Contribution |
 | :--- | :--- | :--- | :--- |
@@ -123,18 +123,25 @@ We evaluated three diverse algorithms using **Stratified K-Fold Cross-Validation
 
 #### Model Performance Comparison
 
-| Model | CV ROC-AUC (Mean) | Test Accuracy | Precision | Recall |
-| :--- | :--- | :--- | :--- | :--- |
-| **Logistic Regression** | **0.9009** | 0.8689 | 0.8125 | **0.9286** |
-| Random Forest | 0.8840 | **0.8852** | 0.8387 | 0.9286 |
-| Gradient Boosting | 0.8528 | 0.8689 | 0.8125 | 0.9286 |
+| Model | CV ROC-AUC (Mean) | Test Accuracy | Precision | Recall | F1 Score |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Logistic Regression** | **0.9009** | 0.8689 | 0.8125 | **0.9286** | 0.8667 |
+| Random Forest | 0.8840 | **0.8852** | 0.8387 | 0.9286 | **0.8814** |
+| Gradient Boosting | 0.8528 | 0.8689 | 0.8125 | 0.9286 | 0.8667 |
+
 
 #### Selection Logic
-The automated selection logic (defined in `src/model_building/train_model.py`) prioritizes **Mean CV ROC-AUC** as the primary metric for stability.
+The automated selection logic (defined in `src/model_building/train_model.py`) prioritizes **F1 Score** as the primary metric for stability, particularly for imbalanced datasets or costs of errors.
 
-> **Selected Model: Logistic Regression**
+**Why F1 Score?**
+The F1 Score is the harmonic mean of Precision and Recall. In the context of Heart Disease prediction:
+-   **High Recall** is crucial: We must not miss any positive cases (False Negatives), as failing to diagnose a patient could be fatal.
+-   **Precision matters**: We also want to minimize False Positives to avoid unnecessary treatment and anxiety.
+F1 Score provides a single metric that balances these two competing objectives, ensuring the model is robust and reliable for medical diagnosis, rather than just being accurate on the majority class.
+
+> **Selected Model: Random Forest**
 >
-> Although Random Forest achieved a slightly higher Test Accuracy (88.52%), **Logistic Regression** was selected because it achieved the highest Mean CV ROC-AUC (**0.9009**). This indicates that it is less likely to overfit and provides more consistent ranking of probabilities across different data folds. Additionally, its high Recall (0.9286) is crucial for this medical use case (minimizing false negatives).
+> **Random Forest** was selected because it achieved the highest **F1 Score (0.8814)**. This balanced metric ensures that the model maintains a good trade-off between Precision and Recall, which is critical for medical diagnosis where both false positives and false negatives carry significant costs. Additionally, it maintained a high Test Accuracy (0.8852) and strong Recall (0.9286).
 
 ## 3. Experiment Tracking Summary
 
@@ -160,9 +167,9 @@ Based on the latest experiment cycle:
 
 | Model | Run ID | Status | Key Result |
 | :--- | :--- | :--- | :--- |
-| **Logistic Regression** | `1ba457450f2641a69d41a89a44639546` | **Registered** | **Highest CV ROC-AUC (0.9009)** |
-| Random Forest | `2219879ce6494654af56ab2414e0cf73` | Archived | Accuracy: 0.8852 |
-| Gradient Boosting | `ea2881acdae34c1fad7cb07d78d0f4fb` | Archived | ROC-AUC: 0.9535 |
+| **Random Forest** | `57ecee26e31d450d8e4f3e7ed35781ab` | **Registered** | **Highest F1 Score (0.8814)** |
+| Logistic Regression | `1ba457450f2641a69d41a89a44639546` | Archived | F1 Score: 0.8667 |
+| Gradient Boosting | `ea2881acdae34c1fad7cb07d78d0f4fb` | Archived | F1 Score: 0.8667 |
 
 ### 3.4 Model Registry & Artifacts
 -   **Artifacts Preserved**:
@@ -172,9 +179,9 @@ Based on the latest experiment cycle:
     -   `input_example.json`: A sample of the training data (first 5 rows) to validate schema during serving.
 
 -   **Registration Strategy**:
-    The training script automatically compares the `cv_roc_auc` of all candidates. The model with the highest score (Logistic Regression) was programmatically registered in the MLflow Model Registry as:
+    The training script automatically compares the `f1_score` of all candidates. The model with the highest score (Random Forest) was programmatically registered in the MLflow Model Registry as:
     -   **Model Name**: `HeartDiseaseModel`
-    -   **Version**: `1`
+    -   **Version**: `2`
     -   **Stage**: Ready for Production / Deployment.
 
 ## 4. Architecture Diagram
