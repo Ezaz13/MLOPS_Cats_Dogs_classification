@@ -12,12 +12,14 @@ spec:
       labels:
         app: heart-disease-app
     spec:
+      imagePullSecrets:
+      - name: regcred
       containers:
       - name: heart-disease-app
         image: ezaz13/heart-disease-app:latest
+#        image: ezaz13/heart-disease-app:latest v20
 
         imagePullPolicy: IfNotPresent
-
         ports:
         - containerPort: 5000
         resources:
