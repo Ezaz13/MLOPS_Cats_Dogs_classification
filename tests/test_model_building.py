@@ -47,5 +47,5 @@ class TestModelBuilding(unittest.TestCase):
         
         X_train, X_test, _, _ = prepare_data(self.sample_prepared_data)
         
-        self.assertEqual(X_train['age'].dtype, 'int64')
-        self.assertEqual(X_test['age'].dtype, 'int64')
+        self.assertEqual(X_train['age'].dtype, 'int32')
+        self.assertEqual(X_test['age'].dtype, 'int32')
