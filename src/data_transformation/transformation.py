@@ -1,111 +1,119 @@
-import os
 import sys
-import pandas as pd
-
-# ------------------ SETUP ------------------
-# Make paths robust by defining them relative to the project root.
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+from pathlib import Path
+from PIL import Image, ImageFile
+from tqdm import tqdm
+from sklearn.model_selection import train_test_split
 
 from src.utility.exception import CustomException
 from src.utility.logger import setup_logging
 
-# Setup logging
+# --------------------------------------------------
+# CONFIG
+# --------------------------------------------------
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 logger = setup_logging("data_transformation")
 
-# Define path for the input CSV file
-prepared_csv_file = os.path.join(PROJECT_ROOT, "data", "prepared", "prepared_heart_data_latest.csv")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+RAW_DATA_PATH = PROJECT_ROOT / "data" / "raw" / "PetImages"
+TRANSFORMED_ROOT = PROJECT_ROOT / "data" / "transformed"
 
-# Define path for the output CSV file
-transformed_data_dir = os.path.join(PROJECT_ROOT, "data", "transformed")
-os.makedirs(transformed_data_dir, exist_ok=True)
-transformed_csv_file = os.path.join(transformed_data_dir, "transformed_heart_data.csv")
+IMAGE_SIZE = (224, 224)
+RANDOM_STATE = 42
+CLASSES = ["cat", "dog"]
 
-def perform_feature_engineering(df):
-    """
-    Performs feature engineering for the Heart Disease dataset.
-    Creates derived features relevant to cardiac health.
-    """
-    logger.info("Starting feature engineering...")
-    df_transformed = df.copy()
+# --------------------------------------------------
+# CREATE OUTPUT FOLDERS
+# --------------------------------------------------
+def create_dirs():
+    for split in ["train", "val", "test"]:
+        for cls in CLASSES:
+            (TRANSFORMED_ROOT / split / cls).mkdir(parents=True, exist_ok=True)
 
-    # 1. Rate Pressure Product (RPP)
-    # RPP = Heart Rate * Systolic Blood Pressure. It is a measure of the stress put on the cardiac muscle.
-    # Note: Features are scaled, but the interaction term is still valuable for non-linear models.
-    if 'thalach' in df_transformed.columns and 'trestbps' in df_transformed.columns:
-        df_transformed['rate_pressure_product'] = df_transformed['thalach'] * df_transformed['trestbps']
-        logger.info("Created feature: rate_pressure_product")
+# --------------------------------------------------
+# LOAD IMAGE PATHS
+# --------------------------------------------------
+def collect_image_paths():
+    records = []
 
-    # 2. Age Groups
-    # Binning age into quartiles to capture non-linear risk factors associated with aging.
-    if 'age' in df_transformed.columns:
+    for cls in CLASSES:
+        class_dir = RAW_DATA_PATH / cls.capitalize()
+        if not class_dir.exists():
+            raise CustomException(f"Missing folder: {class_dir}", sys)
+
+        for img_path in class_dir.iterdir():
+            if img_path.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+                records.append((img_path, cls))
+
+    if not records:
+        raise CustomException("No images found.", sys)
+
+    return records
+
+# --------------------------------------------------
+# SPLIT DATA
+# --------------------------------------------------
+def split_data(records):
+    paths, labels = zip(*records)
+
+    train_p, temp_p, train_l, temp_l = train_test_split(
+        paths, labels,
+        test_size=0.2,
+        stratify=labels,
+        random_state=RANDOM_STATE
+    )
+
+    val_p, test_p, val_l, test_l = train_test_split(
+        temp_p, temp_l,
+        test_size=0.5,
+        stratify=temp_l,
+        random_state=RANDOM_STATE
+    )
+
+    return {
+        "train": list(zip(train_p, train_l)),
+        "val": list(zip(val_p, val_l)),
+        "test": list(zip(test_p, test_l)),
+    }
+
+# --------------------------------------------------
+# TRANSFORM + SAVE
+# --------------------------------------------------
+def process_split(split_name, samples):
+    logger.info(f"Processing {split_name} set...")
+
+    for src_path, label in tqdm(samples, desc=split_name.upper()):
+        dst_path = TRANSFORMED_ROOT / split_name / label / src_path.name
+
         try:
-            df_transformed['age_group'] = pd.qcut(
-                df_transformed['age'], 
-                q=4, 
-                labels=['age_q1', 'age_q2', 'age_q3', 'age_q4'], 
-                duplicates='drop'
-            )
-            # One-hot encode the new categorical feature
-            df_transformed = pd.get_dummies(df_transformed, columns=['age_group'], prefix='', prefix_sep='')
-            logger.info("Created features from age groups.")
+            with Image.open(src_path) as img:
+                img = img.convert("RGB")
+                img = img.resize(IMAGE_SIZE, Image.Resampling.LANCZOS)
+                img.save(dst_path, format="JPEG", quality=95)
+
         except Exception as e:
-            logger.warning(f"Could not create age groups. Error: {e}")
+            logger.warning(f"Skipped image {src_path}: {e}")
 
-    # 3. High Risk Flag
-    # Flag patients with high ST depression (oldpeak) and high number of vessels colored (ca)
-    # Using 75th percentile as threshold for 'high' since data is scaled.
-    if 'oldpeak' in df_transformed.columns and 'ca' in df_transformed.columns:
-        high_oldpeak = df_transformed['oldpeak'].quantile(0.75)
-        high_ca = df_transformed['ca'].quantile(0.75)
-        
-        df_transformed['is_high_risk'] = (
-            (df_transformed['oldpeak'] > high_oldpeak) & 
-            (df_transformed['ca'] > high_ca)
-        ).astype(int)
-        logger.info("Created feature: is_high_risk")
-
-    # 4. Metabolic Indicator (Interaction)
-    # Interaction between Cholesterol and Fasting Blood Sugar (if fbs_1.0 exists)
-    if 'chol' in df_transformed.columns and 'fbs_1.0' in df_transformed.columns:
-        df_transformed['chol_fbs_interaction'] = df_transformed['chol'] * df_transformed['fbs_1.0']
-        logger.info("Created feature: chol_fbs_interaction")
-
-    logger.info("Feature engineering completed.")
-    return df_transformed
-
+# --------------------------------------------------
+# MAIN
+# --------------------------------------------------
 def main():
-    """
-    Main function to run the data transformation and storage pipeline.
-    """
-    logger.info("Starting Data Transformation and Storage Pipeline...")
+    logger.info("Starting Kaggle-style data transformation")
 
+    create_dirs()
+    records = collect_image_paths()
+    splits = split_data(records)
+
+    for split_name, samples in splits.items():
+        process_split(split_name, samples)
+
+    logger.info("Data transformation completed successfully.")
+    print("\nDATA TRANSFORMATION COMPLETED SUCCESSFULLY")
+
+# --------------------------------------------------
+if __name__ == "__main__":
     try:
-        logger.info(f"Loading prepared data from {prepared_csv_file}...")
-        if not os.path.exists(prepared_csv_file):
-            raise FileNotFoundError(f"The prepared data file was not found at {prepared_csv_file}. Please run the data preparation script first.")
-        df_prepared = pd.read_csv(prepared_csv_file)
-        logger.info("Prepared data loaded successfully.")
-
-        df_transformed = perform_feature_engineering(df_prepared)
-        
-        logger.info(f"Saving transformed data to {transformed_csv_file}...")
-        df_transformed.to_csv(transformed_csv_file, index=False)
-        logger.info("Transformed data saved successfully.")
-
-        print(f"\nDATA TRANSFORMATION COMPLETED SUCCESSFULLY. Saved to: {transformed_csv_file}")
-
-    except FileNotFoundError as e:
-        logger.error(f"Error: {e}")
-        print(f"\nError: {e}")
-        sys.exit(1)
-    except CustomException as e:
-        logger.error(f"A pipeline error occurred: {e}")
-        print(f"\nAn error occurred: {e}")
-        sys.exit(1)
+        main()
     except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}")
-        print(f"\nAn unexpected error occurred: {e}")
+        logger.error("Pipeline failed.", exc_info=True)
         sys.exit(1)
-
-if __name__ == '__main__':
-    main()
