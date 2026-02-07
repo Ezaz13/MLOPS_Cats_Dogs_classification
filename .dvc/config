@@ -1,0 +1,4 @@
+[core]
+    remote = myremote
+['remote "myremote"']
+    url = F:\Bits\Semester_3\Third Semester\MLOPS\Assignment\Cats_Dogs_Classification-Project\dvc_storage
