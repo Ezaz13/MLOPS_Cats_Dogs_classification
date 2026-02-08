@@ -1,4 +1,4 @@
-name: Heart Disease Prediction CI/CD
+name: Cats and Dogs Classification CI/CD
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ "main", "master" ]
 
 env:
-  DOCKER_IMAGE_NAME: heart-disease-app
+  DOCKER_IMAGE_NAME: cats-dogs-app
 
 jobs:
   build-test-train:
@@ -79,6 +79,13 @@ jobs:
         path: mlflow.db
         if-no-files-found: warn
 
+    - name: Archive Model Export
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: model-export
+        path: models/model_export/
+
   docker-build-push:
     needs: build-test-train
     runs-on: ubuntu-latest
@@ -99,6 +106,12 @@ jobs:
         with:
           name: mlflow-db
           path: .
+
+      - name: Download Model Export
+        uses: actions/download-artifact@v4
+        with:
+          name: model-export
+          path: models/model_export
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -155,12 +168,12 @@ jobs:
           kubectl apply -f k8/deployment.yaml
           kubectl apply -f k8/service.yaml
 
-          kubectl set image deployment/heart-disease-app \
-            heart-disease-app=${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+          kubectl set image deployment/cats-dogs-app \
+            cats-dogs-app=${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
 
       - name: Verify rollout
         run: |
-          kubectl rollout status deployment/heart-disease-app
+          kubectl rollout status deployment/cats-dogs-app
 
       - name: Show cluster status
         run: |
