@@ -1,248 +1,261 @@
 """
-End-to-End Model Training, Evaluation & Experiment Tracking
-Heart Disease Prediction Project (MLOps)
+End-to-End CNN Training, Evaluation & Experiment Tracking
+Cats vs Dogs Classification (Computer Vision, MLOps)
 
 Features:
-- Unified preprocessing pipeline
-- Multiple model comparison
-- Stratified cross-validation
-- MLflow experiment tracking (SQLite backend)
-- Automatic markdown report generation
-- Best model registration
+- Transfer Learning (ResNet18)
+- Explicit CPU / GPU logging
+- Batch-level training logs
+- AMP (mixed precision)
+- MLflow experiment tracking (SQLite)
+- Windows-safe multiprocessing
 """
 
-import pandas as pd
+import os
+import sys
+import time
+import logging
+import numpy as np
+import torch
 import mlflow
-import mlflow.sklearn
+import mlflow.pytorch
 
 from pathlib import Path
-from datetime import datetime
-
-from sklearn.model_selection import (
-    train_test_split,
-    StratifiedKFold,
-    cross_val_score
-)
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    roc_auc_score
-)
+from torch import nn, optim, amp
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms, models
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 
 # ------------------------------------------------------------------
-# Paths
+# LOGGING CONFIG
+# ------------------------------------------------------------------
+logging.getLogger("alembic").setLevel(logging.WARNING)
+logging.getLogger("mlflow").setLevel(logging.ERROR)
+
+from src.utility.logger import setup_logging
+logger = setup_logging("model_training")
+
+# ------------------------------------------------------------------
+# PROJECT PATHS
 # ------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DATA_PATH = PROJECT_ROOT / "data" / "transformed" / "transformed_heart_data.csv"
-REPORT_PATH = PROJECT_ROOT / "src" / "model_building" / "model_performance_report.md"
+DATA_ROOT = PROJECT_ROOT / "data" / "transformed"
 
 # ------------------------------------------------------------------
-# MLflow Configuration
+# TRAINING CONFIG
 # ------------------------------------------------------------------
-MLFLOW_TRACKING_URI = "sqlite:///mlflow.db"
-EXPERIMENT_NAME = "Heart Disease Prediction"
-REGISTERED_MODEL_NAME = "HeartDiseaseModel"
+IMAGE_SIZE = 224
+BATCH_SIZE = 32
+EPOCHS = 5
+LR = 1e-4
 
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-mlflow.set_experiment(EXPERIMENT_NAME)
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+NUM_WORKERS = 0 if os.name == "nt" else os.cpu_count() // 2
+
 # ------------------------------------------------------------------
-# Data Preparation
+# DEVICE LOGS
 # ------------------------------------------------------------------
-def prepare_data(df: pd.DataFrame):
-    if "target" not in df.columns:
-        raise ValueError("Dataset must contain a 'target' column")
+logger.info("========================================")
+logger.info(f"DEVICE IN USE : {DEVICE}")
+# Force print to ensure visibility even if logging fails
+print(f"Training running on: {DEVICE}")
 
-    df = df.copy()
-    df["target"] = (df["target"] > 0).astype(int)
+if DEVICE.type == "cuda":
+    logger.info(f"GPU NAME     : {torch.cuda.get_device_name(0)}")
+    logger.info(f"CUDA VERSION : {torch.version.cuda}")
+else:
+    logger.warning("GPU NOT AVAILABLE — RUNNING ON CPU")
 
-    X = df.drop(columns=["target"])
-    y = df["target"]
+logger.info("========================================")
 
-    return train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        stratify=y,
-        random_state=42
+# ------------------------------------------------------------------
+# DATA LOADERS
+# ------------------------------------------------------------------
+def get_dataloaders():
+    logger.info("Preparing datasets...")
+
+    transform = transforms.Compose([
+        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        )
+    ])
+
+    loaders = {}
+    datasets_map = {}
+
+    for split in ["train", "val", "test"]:
+        dataset = datasets.ImageFolder(DATA_ROOT / split, transform=transform)
+        loader = DataLoader(
+            dataset,
+            batch_size=BATCH_SIZE,
+            shuffle=(split == "train"),
+            num_workers=NUM_WORKERS,
+            pin_memory=(DEVICE.type == "cuda")
+        )
+
+        datasets_map[split] = dataset
+        loaders[split] = loader
+
+        logger.info(
+            f"{split.upper()} SET -> "
+            f"Images: {len(dataset)} | Batches: {len(loader)}"
+        )
+
+    return loaders, datasets_map["train"].classes
+
+# ------------------------------------------------------------------
+# MODEL
+# ------------------------------------------------------------------
+def build_model(num_classes):
+    logger.info("Building ResNet18 (pretrained on ImageNet)...")
+    model = models.resnet18(weights="IMAGENET1K_V1")
+    model.fc = nn.Linear(model.fc.in_features, num_classes)
+    model = model.to(DEVICE)
+    logger.info("Model successfully moved to device.")
+    return model
+
+# ------------------------------------------------------------------
+# TRAIN ONE EPOCH (WITH BATCH LOGS)
+# ------------------------------------------------------------------
+def train_epoch(model, loader, criterion, optimizer, scaler, epoch):
+    model.train()
+    losses = []
+    start_time = time.time()
+
+    logger.info(f"---- STARTING EPOCH {epoch + 1} ----")
+
+    for batch_idx, (images, labels) in enumerate(loader):
+        images = images.to(DEVICE, non_blocking=True)
+        labels = labels.to(DEVICE, non_blocking=True)
+
+        optimizer.zero_grad()
+
+        with amp.autocast(device_type="cuda", enabled=(DEVICE.type == "cuda")):
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+
+        losses.append(loss.item())
+
+        # Log every 50 batches
+        if batch_idx % 50 == 0:
+            logger.info(
+                f"[Epoch {epoch+1}] "
+                f"Batch {batch_idx}/{len(loader)} | "
+                f"Loss: {loss.item():.4f}"
+            )
+
+    duration = time.time() - start_time
+    logger.info(
+        f"---- EPOCH {epoch + 1} COMPLETED "
+        f"in {duration/60:.2f} minutes ----"
     )
 
-# ------------------------------------------------------------------
-# Pipeline Builder
-# ------------------------------------------------------------------
-def build_pipeline(X: pd.DataFrame, classifier) -> Pipeline:
-    numeric_features = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
-    categorical_features = X.select_dtypes(include=["object", "category"]).columns.tolist()
-
-    numeric_pipeline = Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler())
-    ])
-
-    categorical_pipeline = Pipeline([
-        ("imputer", SimpleImputer(strategy="most_frequent")),
-        ("encoder", OneHotEncoder(handle_unknown="ignore"))
-    ])
-
-    preprocessor = ColumnTransformer([
-        ("num", numeric_pipeline, numeric_features),
-        ("cat", categorical_pipeline, categorical_features),
-    ])
-
-    return Pipeline([
-        ("preprocessor", preprocessor),
-        ("classifier", classifier)
-    ])
+    return float(np.mean(losses))
 
 # ------------------------------------------------------------------
-# Markdown Report Generator
+# EVALUATION
 # ------------------------------------------------------------------
-def generate_markdown_report(results: dict):
-    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+def evaluate(model, loader, phase):
+    logger.info(f"Evaluating on {phase.upper()} set...")
+    model.eval()
 
-    with open(REPORT_PATH, "w") as f:
-        f.write("# Model Performance Report\n\n")
-        f.write(f"*Report generated on: {datetime.now():%Y-%m-%d %H:%M:%S}*\n\n")
-        f.write("*MLflow Experiment: 'Heart Disease Prediction'*\n\n")
+    y_true, y_pred, y_prob = [], [], []
 
-        for model, data in results.items():
-            f.write(f"## {model}\n\n")
-            f.write(f"- **MLflow Run ID**: `{data['run_id']}`\n")
-            f.write(f"- **Best Params**: `{data['params']}`\n")
-            f.write(f"- **CV ROC-AUC (Mean)**: {data['cv_roc_auc']:.4f}\n")
-            f.write(f"- **Test Accuracy**: {data['accuracy']:.4f}\n")
-            f.write(f"- **Precision**: {data['precision']:.4f}\n")
-            f.write(f"- **Recall**: {data['recall']:.4f}\n")
-            f.write(f"- **F1-Score**: {data['f1']:.4f}\n")
-            f.write(f"- **ROC-AUC**: {data['roc_auc']:.4f}\n\n")
+    with torch.no_grad():
+        for images, labels in loader:
+            images = images.to(DEVICE, non_blocking=True)
+            outputs = model(images)
+
+            probs = torch.softmax(outputs, dim=1)[:, 1]
+            preds = torch.argmax(outputs, dim=1)
+
+            y_true.extend(labels.cpu().numpy())
+            y_pred.extend(preds.cpu().numpy())
+            y_prob.extend(probs.cpu().numpy())
+
+    metrics = {
+        "accuracy": accuracy_score(y_true, y_pred),
+        "precision": precision_score(y_true, y_pred),
+        "recall": recall_score(y_true, y_pred),
+        "f1": f1_score(y_true, y_pred),
+        "roc_auc": roc_auc_score(y_true, y_prob),
+    }
+
+    logger.info(f"{phase.upper()} METRICS: {metrics}")
+    return metrics
 
 # ------------------------------------------------------------------
-# Training & Model Selection
+# MAIN
 # ------------------------------------------------------------------
 def main():
-    print("Starting training pipeline...")
+    logger.info("========== TRAINING PIPELINE STARTED ==========")
 
-    if not DATA_PATH.exists():
-        raise FileNotFoundError(f"Dataset not found at {DATA_PATH}")
+    mlflow.set_tracking_uri("sqlite:///mlflow.db")
+    mlflow.set_experiment("Cats vs Dogs CNN")
+    REGISTERED_MODEL_NAME = "CatsDogsCNN"
 
-    df = pd.read_csv(DATA_PATH)
-    X_train, X_test, y_train, y_test = prepare_data(df)
+    loaders, classes = get_dataloaders()
+    model = build_model(num_classes=len(classes))
 
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=LR)
+    scaler = amp.GradScaler(enabled=(DEVICE.type == "cuda"))
 
-    models = [
-        {
-            "name": "Logistic Regression",
-            "estimator": LogisticRegression(
-                C=0.1,
-                solver="liblinear",
-                class_weight="balanced",
-                max_iter=1000,
-                random_state=42
-            ),
-            "params": {"C": 0.1, "solver": "liblinear"}
-        },
-        {
-            "name": "Random Forest",
-            "estimator": RandomForestClassifier(
-                n_estimators=100,
-                max_depth=10,
-                class_weight="balanced",
-                random_state=42,
-                n_jobs=-1
-            ),
-            "params": {"n_estimators": 100, "max_depth": 10}
-        },
-        {
-            "name": "Gradient Boosting",
-            "estimator": GradientBoostingClassifier(
-                n_estimators=150,
-                learning_rate=0.05,
-                max_depth=3,
-                random_state=42
-            ),
-            "params": {"n_estimators": 150, "learning_rate": 0.05}
-        }
-    ]
-
-    results = {}
-    best_score = 0.0
+    best_f1 = 0.0
     best_run_id = None
-    best_model_name = ""
 
-    for model in models:
-        name = model["name"]
-        print(f"Training {name}...")
+    with mlflow.start_run(run_name="ResNet18_GPU"):
+        mlflow.log_params({
+            "architecture": "ResNet18",
+            "epochs": EPOCHS,
+            "batch_size": BATCH_SIZE,
+            "learning_rate": LR,
+            "image_size": IMAGE_SIZE,
+            "device": str(DEVICE),
+        })
 
-        with mlflow.start_run(run_name=name) as run:
-            pipeline = build_pipeline(X_train, model["estimator"])
+        for epoch in range(EPOCHS):
+            train_loss = train_epoch(
+                model, loaders["train"], criterion, optimizer, scaler, epoch
+            )
+            mlflow.log_metric("train_loss", train_loss, step=epoch)
 
-            cv_scores = cross_val_score(
-                pipeline,
-                X_train,
-                y_train,
-                cv=cv,
-                scoring="roc_auc",
-                n_jobs=-1
+            val_metrics = evaluate(model, loaders["val"], "val")
+            mlflow.log_metrics(
+                {f"val_{k}": v for k, v in val_metrics.items()},
+                step=epoch
             )
 
-            pipeline.fit(X_train, y_train)
+            if val_metrics["f1"] > best_f1:
+                best_f1 = val_metrics["f1"]
+                best_run_id = mlflow.active_run().info.run_id
 
-            preds = pipeline.predict(X_test)
-            probs = pipeline.predict_proba(X_test)[:, 1]
+                # Log model WITHOUT input_example (avoids GPU/CPU warnings)
+                mlflow.pytorch.log_model(
+                    model,
+                    name="model"
+                )
 
-            metrics = {
-                "cv_roc_auc": cv_scores.mean(),
-                "accuracy": accuracy_score(y_test, preds),
-                "precision": precision_score(y_test, preds),
-                "recall": recall_score(y_test, preds),
-                "f1": f1_score(y_test, preds),
-                "roc_auc": roc_auc_score(y_test, probs),
-            }
-
-            mlflow.log_metrics(metrics)
-            mlflow.log_params(model["params"])
-            mlflow.set_tags({
-                "domain": "healthcare",
-                "problem_type": "binary_classification"
-            })
-
-            # Log & Register model
-            mlflow.sklearn.log_model(
-                sk_model=pipeline,
-                artifact_path="model",
-                input_example=X_train.head(5)
-            )
-
-            results[name] = {
-                **metrics,
-                "params": model["params"],
-                "run_id": run.info.run_id
-            }
-
-            if metrics["f1"] > best_score:
-                best_score = metrics["f1"]
-                best_run_id = run.info.run_id
-                best_model_name = name
-
-    generate_markdown_report(results)
+        test_metrics = evaluate(model, loaders["test"], "test")
+        mlflow.log_metrics({f"test_{k}": v for k, v in test_metrics.items()})
 
     if best_run_id:
         mlflow.register_model(
             model_uri=f"runs:/{best_run_id}/model",
             name=REGISTERED_MODEL_NAME
         )
-        print(f"Best model registered: {best_model_name}")
+        logger.info("Best model registered in MLflow.")
 
-    print("Training pipeline completed successfully.")
+    logger.info("========== TRAINING PIPELINE COMPLETED ==========")
 
 # ------------------------------------------------------------------
 if __name__ == "__main__":
+    torch.multiprocessing.freeze_support()
     main()
