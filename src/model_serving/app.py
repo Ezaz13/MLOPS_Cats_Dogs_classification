@@ -1,190 +1,185 @@
-import os
-import pathlib
-import logging
-import re
 import sys
-import pandas as pd
+import os
+import torch
+import mlflow.pytorch
+from pathlib import Path
 from flask import Flask, request, jsonify, render_template
-import mlflow
-import mlflow.sklearn
-from mlflow.tracking import MlflowClient
-from prometheus_flask_exporter import PrometheusMetrics
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-from flask import Response
+from PIL import Image
+from torchvision import transforms
+import logging
 
-# -------------------------------------------------
-# Paths & MLflow (DB BACKEND ONLY CHANGE)
-# -------------------------------------------------
-BASE_DIR = pathlib.Path(__file__).resolve().parents[2]
+# ------------------------------------------------------------------
+# SETUP PATHS
+# ------------------------------------------------------------------
+current_file = Path(__file__).resolve()
+project_root = current_file.parents[2]
+sys.path.append(str(project_root))
 
-# Use environment variable if set (useful for Docker), otherwise fallback to local sqlite
-database_path = BASE_DIR / "mlflow.db"
-tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", f"sqlite:///{database_path}")
-mlflow.set_tracking_uri(tracking_uri)
+from src.utility.logger import setup_logging
 
-MODEL_URI = "models:/HeartDiseaseModel/latest"
+# ------------------------------------------------------------------
+# FLASK APP
+# ------------------------------------------------------------------
+app = Flask(__name__, template_folder="templates")
 
-# -------------------------------------------------
-# Flask App
-# -------------------------------------------------
+# Disable Flask's default logger to prevent conflicts
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
+# ------------------------------------------------------------------
+# CONFIGURATION
+# ------------------------------------------------------------------
+MLFLOW_DB_PATH = project_root / "mlflow.db"
+MLFLOW_URI = f"sqlite:///{MLFLOW_DB_PATH.as_posix()}"
+MODEL_NAME = "CatsDogsCNN"
+
+# Class names from ImageFolder (lowercase in dataset folders)
+# Model outputs: 0=cat, 1=dog (alphabetical order)
+CLASSES = ['cat', 'dog']
+
+# Global variables
+device = None
 model = None
-metrics = PrometheusMetrics(app)
-# Categorical features used during training
-CATEGORICAL_FEATURES = ["thal"]
+logger = None
 
+# ------------------------------------------------------------------
+# PREPROCESSING
+# ------------------------------------------------------------------
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
 
-# -------------------------------------------------
-# Load model
-# -------------------------------------------------
+# ------------------------------------------------------------------
+# INITIALIZATION
+# ------------------------------------------------------------------
+def initialize_app():
+    """Initialize logger, device, and model"""
+    global device, model, logger
+    
+    # Force unbuffered output for Windows console visibility
+    os.environ['PYTHONUNBUFFERED'] = '1'
+    
+    # Print startup banner BEFORE logger setup - ensures immediate visibility
+    print("\n" + "=" * 60, flush=True)
+    print("CATS vs DOGS - MODEL SERVING API", flush=True)
+    print("=" * 60, flush=True)
+    
+    # Setup logger
+    logger = setup_logging("model_serving")
+    
+    logger.info(f"Project Root: {project_root}")
+    logger.info(f"MLflow URI: {MLFLOW_URI}")
+    logger.info(f"Model Name: {MODEL_NAME}")
+    
+    # Setup device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Device: {device}")
+    print("=" * 60 + "\n", flush=True)
+    
+    # Load model
+    load_model()
+
 def load_model():
+    """Load the trained model from MLflow registry"""
     global model
     try:
-        app.logger.info(f"Attempting to load model from URI: {MODEL_URI}")
-        # raise Exception("Forced exception for testing fallback logic")
-        model = mlflow.sklearn.load_model(MODEL_URI)
-        app.logger.info(f"Successfully loaded model from {MODEL_URI}")
+        logger.info("Connecting to MLflow tracking server...")
+        mlflow.set_tracking_uri(MLFLOW_URI)
+        
+        model_uri = f"models:/{MODEL_NAME}/Latest"
+        logger.info(f"Loading model from: {model_uri}")
+        
+        model = mlflow.pytorch.load_model(model_uri)
+        model.to(device)
+        model.eval()
+        
+        logger.info("✅ Model loaded successfully!")
+        logger.info(f"Model is running on: {device}")
+        sys.stdout.flush()
+        
     except Exception as e:
-        app.logger.warning(f"Standard load failed: {e}. Attempting path correction for Docker...")
-        try:
-            client = MlflowClient()
-            # Parse model name from URI "models:/HeartDiseaseModel/latest"
-            model_name = MODEL_URI.split("/")[1]
-            app.logger.info(f"Querying MLflow Registry for model: {model_name}")
+        logger.error(f"❌ Failed to load model: {e}")
+        logger.warning("Make sure you have:")
+        logger.warning("  1. Run 'train_model.py' to train the model")
+        logger.warning(f"  2. Registered the model as '{MODEL_NAME}' in MLflow")
+        sys.stdout.flush()
 
-            # Get latest version info
-            versions = client.get_latest_versions(model_name, stages=["None", "Staging", "Production"])
-            app.logger.info(f"Versions found: {[(v.version, v.current_stage, v.run_id) for v in versions]}")
-
-            if not versions:
-                raise Exception("No versions found")
-            latest_version = max(versions, key=lambda x: int(x.version))
-            app.logger.info(
-                f"Selected Version: {latest_version.version} (Stage: {latest_version.current_stage}) Run ID: {latest_version.run_id}")
-
-            # Fix path: Replace host absolute path with Docker container path
-            source = latest_version.source
-            app.logger.info(f"Original source path from registry: {source}")
-            result = re.sub(
-                r"^models:/([^/]+)$",
-                r"/app/mlruns/1/models/\1/artifacts",
-                source
-            )
-            app.logger.info(f"modified_source: {result}")
-            model = mlflow.sklearn.load_model(result)
-
-        except Exception as e2:
-            model = None
-            app.logger.error(f"Failed to load model: {e2}")
-
-
-# -------------------------------------------------
-# UI
-# -------------------------------------------------
-
-@app.route("/metrics")
-def metrics_endpoint():
-    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
-
-
-@app.route("/", methods=["GET"])
+# ------------------------------------------------------------------
+# ROUTES
+# ------------------------------------------------------------------
+@app.route('/', methods=['GET'])
 def index():
-    return render_template("index.html")
+    """Render the web UI"""
+    logger.info("Web UI accessed")
+    sys.stdout.flush()
+    return render_template('index.html')
 
-
-# -------------------------------------------------
-# Health
-# -------------------------------------------------
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({
-        "status": "healthy" if model is not None else "error",
-        "model_loaded": model is not None,
-        "model_uri": MODEL_URI
-    })
-
-
-# -------------------------------------------------
-# Prediction
-# -------------------------------------------------
-@app.route("/predict", methods=["POST"])
+@app.route('/predict', methods=['POST'])
 def predict():
+    """Handle prediction requests"""
     if model is None:
-        return jsonify({"error": "Model not loaded"}), 500
+        logger.error("Prediction request received but model not loaded")
+        sys.stdout.flush()
+        return jsonify({"error": "Model not loaded. Check server logs."}), 503
 
-    data = request.get_json()
-    if data is None:
-        return jsonify({"error": "Invalid JSON payload"}), 400
-
-    app.logger.info("Starting inference...")
-    app.logger.info(f"Received prediction parameters: {data}")
+    if 'file' not in request.files:
+        logger.warning("Prediction request missing file")
+        sys.stdout.flush()
+        return jsonify({"error": "No file uploaded"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        logger.warning("Prediction request with empty filename")
+        sys.stdout.flush()
+        return jsonify({"error": "No selected file"}), 400
 
     try:
-        df = pd.DataFrame([data])
+        logger.info(f"Processing prediction for: {file.filename}")
+        
+        # Load and preprocess image
+        image = Image.open(file).convert('RGB')
+        input_tensor = transform(image).unsqueeze(0).to(device)
 
-        # ---------------------------------------------------------
-        # 1. Data Mapping (Form values -> Model training standards)
-        # ---------------------------------------------------------
-        if 'cp' in df.columns:
-            df['cp'] = df['cp'].map({0: 1, 1: 2, 2: 3, 3: 4})
+        # Make prediction
+        with torch.no_grad():
+            outputs = model(input_tensor)
+            probs = torch.softmax(outputs, dim=1)
+            confidence, pred_idx = torch.max(probs, 1)
+            
+            # Get predicted class (lowercase from model)
+            predicted_class = CLASSES[pred_idx.item()]
+            conf_score = confidence.item()
+            
+            # Capitalize for display
+            display_class = predicted_class.capitalize()
 
-        if 'slope' in df.columns:
-            df['slope'] = df['slope'].map({0: 1, 1: 2, 2: 3})
+        logger.info(f"✅ Prediction: {display_class} (confidence: {conf_score:.2%})")
+        sys.stdout.flush()
 
-        if 'thal' in df.columns:
-            df['thal'] = df['thal'].map({1: 3, 2: 6, 3: 7})
-
-        # ---------------------------------------------------------
-        # 2. Feature Engineering
-        # ---------------------------------------------------------
-        df['rate_pressure_product'] = df['trestbps'] * df['thalach']
-        df['chol_fbs_interaction'] = df['chol'] * df['fbs']
-
-        # ---------------------------------------------------------
-        # 3. One-Hot Encoding & Alignment
-        # ---------------------------------------------------------
-        cat_cols = ["sex", "cp", "fbs", "restecg", "exang", "slope", "thal"]
-        for col in cat_cols:
-            if col in df.columns:
-                df[col] = df[col].astype(float)
-
-        df_processed = pd.get_dummies(df, columns=cat_cols)
-
-        if hasattr(model, "feature_names_in_"):
-            df_processed = df_processed.reindex(
-                columns=model.feature_names_in_,
-                fill_value=0
-            )
-
-        preds = model.predict(df_processed)
-        probs = model.predict_proba(df_processed)[:, 1]
-
-        app.logger.info(f"Prediction: {int(preds[0])}, Confidence: {float(probs[0])}")
-
-        return jsonify([{
-            "prediction": int(preds[0]),
-            "confidence": float(probs[0])
-        }])
+        return jsonify({
+            "class": display_class,  # Capitalized for display
+            "confidence": float(conf_score)
+        })
 
     except Exception as e:
-        app.logger.error(f"Inference failed: {e}")
-        return jsonify({
-            "error": "Inference failed",
-            "details": str(e)
-        }), 400
+        logger.error(f"❌ Prediction error: {e}", exc_info=True)
+        sys.stdout.flush()
+        return jsonify({"error": str(e)}), 500
 
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
-
-app.logger.setLevel(logging.INFO)
-# -------------------------------------------------
-# Entrypoint
-# -------------------------------------------------
-if __name__ == "__main__":
-    load_model()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+# ------------------------------------------------------------------
+# MAIN
+# ------------------------------------------------------------------
+if __name__ == '__main__':
+    # Initialize app (logger, device, model)
+    initialize_app()
+    
+    logger.info("\n" + "=" * 60)
+    logger.info("Starting Flask server on http://0.0.0.0:5001")
+    logger.info("Press Ctrl+C to stop the server")
+    logger.info("=" * 60 + "\n")
+    sys.stdout.flush()
+    
+    # Run Flask app
+    app.run(host='0.0.0.0', port=5001, debug=True, use_reloader=False)
