@@ -1,0 +1,78 @@
+# ============================================================
+# DVC Pipeline Configuration
+# Cats & Dogs Classification MLOps Project
+# ============================================================
+
+stages:
+  # Stage 1: Data Ingestion
+  data_ingestion:
+    cmd: python src/data_ingestion/ingestion.py
+    deps:
+      - src/data_ingestion/ingestion.py
+    params:
+      - data_ingestion
+      - paths.raw_data
+    outs:
+      - data/raw:
+          cache: true
+          persist: false
+
+  # Stage 2: Data Validation
+  data_validation:
+    cmd: python src/data_validation/validation.py
+    deps:
+      - src/data_validation/validation.py
+      - data/raw
+    params:
+      - data_validation
+    outs:
+      - reports/validation:
+          cache: false
+          persist: true
+
+  # Stage 3: Data Preparation
+  data_preparation:
+    cmd: python src/data_preparation/preparation.py
+    deps:
+      - src/data_preparation/preparation.py
+      - data/raw
+    params:
+      - data_preparation
+      - global.random_seed
+    outs:
+      - data/prepared:
+          cache: true
+          persist: false
+      - artifacts/eda:
+          cache: false
+          persist: true
+
+  # Stage 4: Data Transformation
+  data_transformation:
+    cmd: python src/data_transformation/transformation.py
+    deps:
+      - src/data_transformation/transformation.py
+      - data/raw
+    params:
+      - data_transformation
+    outs:
+      - data/transformed:
+          cache: true
+          persist: false
+
+  # Stage 5: Model Training
+  model_training:
+    cmd: python src/model_building/train_model.py
+    deps:
+      - src/model_building/train_model.py
+      - data/transformed
+    params:
+      - model_training
+      - global.random_seed
+    outs:
+      - models:
+          cache: true
+          persist: false
+      - mlflow.db:
+          cache: false
+          persist: true
