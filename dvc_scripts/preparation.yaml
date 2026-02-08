@@ -1,0 +1,23 @@
+# ============================================================
+# Data Preparation Stage Configuration
+# ============================================================
+
+raw_data_path: "data/raw/PetImages"
+prepared_output_path: "data/prepared"
+eda_output_path: "artifacts/eda"
+
+expected_classes:
+  - "cat"
+  - "dog"
+
+valid_extensions:
+  - ".jpg"
+  - ".jpeg"
+  - ".png"
+  - ".bmp"
+
+eda_settings:
+  generate_class_distribution: true
+  generate_dimension_plots: true
+  generate_sample_images: true
+  samples_per_class: 4

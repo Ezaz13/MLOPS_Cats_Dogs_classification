@@ -19,6 +19,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 # PROJECT SETUP
 # ------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.append(str(PROJECT_ROOT))
 
 from src.utility.exception import CustomException
 from src.utility.logger import setup_logging

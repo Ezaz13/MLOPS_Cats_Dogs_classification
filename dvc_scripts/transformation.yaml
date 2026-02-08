@@ -1,0 +1,25 @@
+# ============================================================
+# Data Transformation Stage Configuration
+# ============================================================
+
+raw_input_path: "data/raw/PetImages"
+transformed_output_path: "data/transformed"
+
+# Image Processing
+image_size: [224, 224]
+image_format: "JPEG"
+image_quality: 95
+
+# Dataset Splits
+splits:
+  train: 0.8
+  validation: 0.1
+  test: 0.1
+
+# Reproducibility
+random_state: 42
+
+# Classes
+classes:
+  - "cat"
+  - "dog"

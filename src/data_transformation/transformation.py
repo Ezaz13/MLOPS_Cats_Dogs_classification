@@ -4,6 +4,12 @@ from PIL import Image, ImageFile
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
+# --------------------------------------------------
+# PROJECT SETUP
+# --------------------------------------------------
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.append(str(PROJECT_ROOT))
+
 from src.utility.exception import CustomException
 from src.utility.logger import setup_logging
 

@@ -1,0 +1,18 @@
+# ============================================================
+# Data Validation Stage Configuration
+# ============================================================
+
+expected_classes:
+  - "cat"
+  - "dog"
+
+valid_extensions:
+  - ".jpg"
+  - ".jpeg"
+  - ".png"
+
+min_samples_per_class: 100
+max_imbalance_ratio: 2.0
+
+raw_data_path: "data/raw/PetImages"
+report_output_path: "reports/validation"

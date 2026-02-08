@@ -27,6 +27,12 @@ from torchvision import datasets, transforms, models
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 
 # ------------------------------------------------------------------
+# PROJECT SETUP
+# ------------------------------------------------------------------
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.append(str(PROJECT_ROOT))
+
+# ------------------------------------------------------------------
 # LOGGING CONFIG
 # ------------------------------------------------------------------
 logging.getLogger("alembic").setLevel(logging.WARNING)
@@ -36,9 +42,8 @@ from src.utility.logger import setup_logging
 logger = setup_logging("model_training")
 
 # ------------------------------------------------------------------
-# PROJECT PATHS
+# DATA PATHS
 # ------------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_ROOT = PROJECT_ROOT / "data" / "transformed"
 
 # ------------------------------------------------------------------
@@ -197,6 +202,10 @@ def evaluate(model, loader, phase):
 def main():
     logger.info("========== TRAINING PIPELINE STARTED ==========")
 
+    # Create models directory for DVC output
+    models_dir = PROJECT_ROOT / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+
     mlflow.set_tracking_uri("sqlite:///mlflow.db")
     mlflow.set_experiment("Cats vs Dogs CNN")
     REGISTERED_MODEL_NAME = "CatsDogsCNN"
@@ -210,6 +219,7 @@ def main():
 
     best_f1 = 0.0
     best_run_id = None
+    best_model_state = None
 
     with mlflow.start_run(run_name="ResNet18_GPU"):
         mlflow.log_params({
@@ -236,6 +246,7 @@ def main():
             if val_metrics["f1"] > best_f1:
                 best_f1 = val_metrics["f1"]
                 best_run_id = mlflow.active_run().info.run_id
+                best_model_state = model.state_dict().copy()
 
                 # Log model WITHOUT input_example (avoids GPU/CPU warnings)
                 mlflow.pytorch.log_model(
@@ -252,6 +263,18 @@ def main():
             name=REGISTERED_MODEL_NAME
         )
         logger.info("Best model registered in MLflow.")
+        
+        # Save best model to local models directory for DVC
+        if best_model_state is not None:
+            model_path = models_dir / "best_model.pth"
+            torch.save({
+                'model_state_dict': best_model_state,
+                'f1_score': best_f1,
+                'run_id': best_run_id,
+                'architecture': 'ResNet18',
+                'num_classes': len(classes),
+            }, model_path)
+            logger.info(f"Best model saved to {model_path}")
 
     logger.info("========== TRAINING PIPELINE COMPLETED ==========")
 

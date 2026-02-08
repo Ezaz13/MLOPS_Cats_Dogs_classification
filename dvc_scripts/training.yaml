@@ -1,0 +1,46 @@
+# ============================================================
+# Model Training Stage Configuration
+# ============================================================
+
+# Model Architecture
+model:
+  name: "resnet18"
+  pretrained: true
+  num_classes: 2
+
+# Training Hyperparameters
+training:
+  batch_size: 32
+  epochs: 5
+  learning_rate: 0.0001
+  optimizer: "adam"
+  loss_function: "cross_entropy"
+
+# Data Configuration
+data:
+  transformed_data_path: "data/transformed"
+  image_size: 224
+  num_workers: 0
+  normalization:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+# Device Configuration
+device:
+  use_cuda: true
+  use_amp: true  # Automatic Mixed Precision
+
+# MLflow Configuration
+mlflow:
+  tracking_uri: "sqlite:///mlflow.db"
+  experiment_name: "Cats vs Dogs CNN"
+  registered_model_name: "CatsDogsCNN"
+  run_name: "ResNet18_GPU"
+
+# Output Paths
+output:
+  model_directory: "models"
+  checkpoint_directory: "models/checkpoints"
+
+# Random Seed
+random_seed: 42

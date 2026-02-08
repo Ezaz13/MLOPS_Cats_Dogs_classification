@@ -1,4 +1,9 @@
 [core]
-    remote = myremote
+    remote = local_storage
+[cache]
+    type = "copy,reflink,hardlink"
+    protected = false
 ['remote "myremote"']
+    url = F:\Bits\Semester_3\Third Semester\MLOPS\Assignment\Cats_Dogs_Classification-Project\dvc_storage
+['remote "local_storage"']
     url = F:\Bits\Semester_3\Third Semester\MLOPS\Assignment\Cats_Dogs_Classification-Project\dvc_storage
