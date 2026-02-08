@@ -30,6 +30,19 @@ class TestModelServingAPI:
         except requests.exceptions.ConnectionError:
             pytest.fail(f"Could not connect to API at {API_URL}. Ensure server is running on port 5001.")
 
+    def test_health_endpoint(self):
+        """Test the /health endpoint."""
+        health_url = API_URL.replace("/predict", "/health")
+        try:
+            response = requests.get(health_url)
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "healthy"
+            assert "model_loaded" in data
+            assert "device" in data
+        except requests.exceptions.ConnectionError:
+            pytest.fail("Connection refused. Is the Flask app running?")
+
     @pytest.mark.parametrize("color, expected_status", [
         ((255, 0, 0), 200),   # Red
         ((0, 255, 0), 200),   # Green

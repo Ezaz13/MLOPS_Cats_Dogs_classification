@@ -168,6 +168,16 @@ def predict():
         sys.stdout.flush()
         return jsonify({"error": str(e)}), 500
 
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check endpoint"""
+    status = {
+        "status": "healthy",
+        "model_loaded": model is not None,
+        "device": str(device) if device else "unknown"
+    }
+    return jsonify(status), 200
+
 # ------------------------------------------------------------------
 # MAIN
 # ------------------------------------------------------------------
