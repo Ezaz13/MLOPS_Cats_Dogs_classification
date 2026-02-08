@@ -1,13 +1,20 @@
 import pytest
-import requests
 import io
-import time
+import torch
+import json
+from unittest.mock import patch, MagicMock
 from PIL import Image
+from src.model_serving.app import app
 
 # ------------------------------------------------------------------
-# Configuration
+# Fixtures
 # ------------------------------------------------------------------
-API_URL = "http://127.0.0.1:5000/predict"
+@pytest.fixture
+def client():
+    """Create a Flask test client."""
+    app.config['TESTING'] = True
+    with app.test_client() as client:
+        yield client
 
 def create_dummy_image(color=(255, 0, 0)):
     """Creates a simple in-memory image for testing."""
@@ -17,52 +24,76 @@ def create_dummy_image(color=(255, 0, 0)):
     img_byte_arr.seek(0)
     return img_byte_arr
 
+# ------------------------------------------------------------------
+# Tests
+# ------------------------------------------------------------------
 class TestModelServingAPI:
-    def test_api_connectivity(self):
-        """Test if the API endpoint is reachable."""
-        try:
-            # Just check if we can connect (even if GET isn't allowed, connection should work)
-            # Actually URL is /predict which expects POST.
-            # Let's try to connect to root / to see if server is up
-            root_url = API_URL.replace("/predict", "/")
-            response = requests.get(root_url)
-            assert response.status_code == 200, "Server root accessible"
-        except requests.exceptions.ConnectionError:
-            pytest.fail(f"Could not connect to API at {API_URL}. Ensure server is running on port 5000.")
 
-    def test_health_endpoint(self):
-        """Test the /health endpoint."""
-        health_url = API_URL.replace("/predict", "/health")
-        try:
-            response = requests.get(health_url)
-            assert response.status_code == 200
-            data = response.json()
-            assert data["status"] == "healthy"
-            assert "model_loaded" in data
-            assert "device" in data
-        except requests.exceptions.ConnectionError:
-            pytest.fail("Connection refused. Is the Flask app running?")
-
-    @pytest.mark.parametrize("color, expected_status", [
-        ((255, 0, 0), 200),   # Red
-        ((0, 255, 0), 200),   # Green
-        ((0, 0, 255), 200),   # Blue
-    ])
-    def test_prediction_endpoint(self, color, expected_status):
-        """Test the /predict endpoint with valid images."""
-        img_bytes = create_dummy_image(color)
-        files = {'file': ('test.jpg', img_bytes, 'image/jpeg')}
+    @patch('src.model_serving.app.logger')
+    @patch('src.model_serving.app.model')
+    @patch('src.model_serving.app.device', torch.device('cpu'))
+    def test_health_endpoint(self, mock_model, mock_logger, client):
+        """Test the /health endpoint with mocked model."""
         
-        try:
-            response = requests.post(API_URL, files=files)
-            assert response.status_code == expected_status
+        # Test when model is loaded (mocked)
+        response = client.get('/health')
+        assert response.status_code == 200
+        data = response.json
+        assert data["status"] == "healthy"
+        assert data["model_loaded"] is True
+        assert "device" in data
+
+    @patch('src.model_serving.app.logger')
+    def test_health_endpoint_no_model(self, mock_logger, client):
+        """Test the /health endpoint when model is NOT loaded."""
+        # We need to explicitly set app.model to None for this test
+        # because the app might have tried to load it on import
+        with patch('src.model_serving.app.model', None):
+            response = client.get('/health')
+            assert response.status_code == 200
+            data = response.json
+            assert data["model_loaded"] is False
+
+    @pytest.mark.parametrize("color, expected_class", [
+        ((255, 0, 0), "Cat"),   # Dummy color mapping
+        ((0, 255, 0), "Dog"),   # Dummy color mapping
+    ])
+    @patch('src.model_serving.app.logger')
+    @patch('src.model_serving.app.model')
+    @patch('src.model_serving.app.device', torch.device('cpu'))
+    def test_prediction_endpoint(self, mock_model, mock_logger, color, expected_class, client):
+        """Test the /predict endpoint with mocked model predictions."""
+        
+        # Setup mock model output
+        # Output shape: [1, 2] (batch_size, num_classes)
+        # Class 0 = Cat, Class 1 = Dog
+        if expected_class == "Cat":
+            # Higher score for index 0
+            mock_output = torch.tensor([[5.0, -5.0]])
+        else:
+            # Higher score for index 1
+            mock_output = torch.tensor([[-5.0, 5.0]])
             
-            # Check JSON structure
-            json_response = response.json()
-            assert "class" in json_response
-            assert "confidence" in json_response
-            assert json_response["class"] in ["Cat", "Dog"]
-            assert 0.0 <= json_response["confidence"] <= 1.0
-            
-        except requests.exceptions.ConnectionError:
-            pytest.fail("Connection refused. Is the Flask app running?")
+        mock_model.return_value = mock_output
+
+        # Create dummy image
+        img_bytes = create_dummy_image(color)
+        data = {'file': (img_bytes, 'test.jpg')}
+
+        # Make request
+        response = client.post('/predict', data=data, content_type='multipart/form-data')
+        
+        assert response.status_code == 200
+        json_response = response.json
+        
+        assert "class" in json_response
+        assert "confidence" in json_response
+        assert json_response["class"] == expected_class
+
+    @patch('src.model_serving.app.logger')
+    @patch('src.model_serving.app.model')
+    def test_prediction_no_file(self, mock_model, mock_logger, client):
+        """Test prediction without file."""
+        response = client.post('/predict', data={})
+        assert response.status_code == 400
+        assert "error" in response.json
