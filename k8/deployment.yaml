@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: heart-disease-app
+  name: cats-dogs-app
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: heart-disease-app
+      app: cats-dogs-app
   template:
     metadata:
       labels:
-        app: heart-disease-app
+        app: cats-dogs-app
     spec:
       imagePullSecrets:
       - name: regcred
       containers:
-      - name: heart-disease-app
-        image: ezaz13/heart-disease-app:latest
-#        image: ezaz13/heart-disease-app:latest v20
+      - name: cats-dogs-app
+        image: ezaz13/cats-dogs-classification:v1
+#        image: ezaz13/cats-dogs-app:latest v20
 
         imagePullPolicy: IfNotPresent
         ports:

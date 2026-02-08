@@ -7,7 +7,7 @@ from PIL import Image
 # ------------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------------
-API_URL = "http://127.0.0.1:5001/predict"
+API_URL = "http://127.0.0.1:5000/predict"
 
 def create_dummy_image(color=(255, 0, 0)):
     """Creates a simple in-memory image for testing."""
@@ -28,7 +28,7 @@ class TestModelServingAPI:
             response = requests.get(root_url)
             assert response.status_code == 200, "Server root accessible"
         except requests.exceptions.ConnectionError:
-            pytest.fail(f"Could not connect to API at {API_URL}. Ensure server is running on port 5001.")
+            pytest.fail(f"Could not connect to API at {API_URL}. Ensure server is running on port 5000.")
 
     def test_health_endpoint(self):
         """Test the /health endpoint."""

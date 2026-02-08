@@ -17,7 +17,7 @@ logger = setup_logging("deployment_validation")
 # ------------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------------
-API_URL = "http://127.0.0.1:5001/predict"
+API_URL = "http://127.0.0.1:8080/predict"
 
 
 def create_dummy_image(color=(255, 0, 0)):

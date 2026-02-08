@@ -51,60 +51,105 @@ transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
+
 # ------------------------------------------------------------------
 # INITIALIZATION
 # ------------------------------------------------------------------
 def initialize_app():
     """Initialize logger, device, and model"""
     global device, model, logger
-    
+
     # Force unbuffered output for Windows console visibility
     os.environ['PYTHONUNBUFFERED'] = '1'
-    
+
     # Print startup banner BEFORE logger setup - ensures immediate visibility
     print("\n" + "=" * 60, flush=True)
     print("CATS vs DOGS - MODEL SERVING API", flush=True)
     print("=" * 60, flush=True)
-    
+
     # Setup logger
     logger = setup_logging("model_serving")
-    
+
     logger.info(f"Project Root: {project_root}")
     logger.info(f"MLflow URI: {MLFLOW_URI}")
     logger.info(f"Model Name: {MODEL_NAME}")
-    
-    # Setup device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info(f"Device: {device}")
+
+    # Setup device - Force CPU since we're loading GPU-trained models with CPU mapping
+    # This ensures compatibility when loading models trained on GPU in CPU-only environments
+    device = torch.device("cpu")
+    logger.info(f"Device: {device} (forced for GPU-trained model compatibility)")
     print("=" * 60 + "\n", flush=True)
-    
+
     # Load model
     load_model()
+
 
 def load_model():
     """Load the trained model from MLflow registry"""
     global model
     try:
-        logger.info("Connecting to MLflow tracking server...")
-        mlflow.set_tracking_uri(MLFLOW_URI)
+        # Save original torch.load to restore later
+        _original_torch_load = torch.load
         
-        model_uri = f"models:/{MODEL_NAME}/Latest"
-        logger.info(f"Loading model from: {model_uri}")
+        # Override torch.load globally to force CPU mapping
+        def _force_cpu_load(*args, **kwargs):
+            """Force all torch.load calls to use CPU mapping"""
+            kwargs['map_location'] = torch.device('cpu')
+            return _original_torch_load(*args, **kwargs)
         
-        model = mlflow.pytorch.load_model(model_uri)
+        # Apply the override
+        torch.load = _force_cpu_load
+        
+        try:
+            model_loaded = False
+            
+            # Try 1: Check for local model artifact (Docker/Production)
+            local_model_path = Path("/app/model")
+            if local_model_path.exists():
+                logger.info(f"Found Docker model at {local_model_path}")
+                logger.info("Loading model with CPU mapping (GPU->CPU compatibility)")
+                model = mlflow.pytorch.load_model(f"file://{local_model_path}")
+                model_loaded = True
+            
+            # Try 2: Check for exported model in project (Local Development)
+            if not model_loaded:
+
+                export_model_path = project_root / "models" / "model_export"
+                if export_model_path.exists():
+                    logger.info(f"Found exported model at {export_model_path}")
+                    logger.info("Loading model with CPU mapping (GPU->CPU compatibility)")
+                    model = mlflow.pytorch.load_model(f"file://{export_model_path.as_posix()}")
+                    model_loaded = True
+            
+            # Try 3: Fallback to MLflow Registry (Local Development)
+            if not model_loaded:
+                logger.info("Connecting to MLflow tracking server...")
+                mlflow.set_tracking_uri(MLFLOW_URI)
+
+                model_uri = f"models:/{MODEL_NAME}/Latest"
+                logger.info(f"Loading model from: {model_uri}")
+                logger.info("Loading model with CPU mapping (GPU->CPU compatibility)")
+
+                model = mlflow.pytorch.load_model(model_uri)
+                model_loaded = True
+        finally:
+            # Always restore original torch.load
+            torch.load = _original_torch_load
+
         model.to(device)
         model.eval()
-        
+
         logger.info("✅ Model loaded successfully!")
         logger.info(f"Model is running on: {device}")
         sys.stdout.flush()
-        
+
     except Exception as e:
         logger.error(f"❌ Failed to load model: {e}")
         logger.warning("Make sure you have:")
         logger.warning("  1. Run 'train_model.py' to train the model")
         logger.warning(f"  2. Registered the model as '{MODEL_NAME}' in MLflow")
         sys.stdout.flush()
+
 
 # ------------------------------------------------------------------
 # ROUTES
@@ -115,6 +160,7 @@ def index():
     logger.info("Web UI accessed")
     sys.stdout.flush()
     return render_template('index.html')
+
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -128,7 +174,7 @@ def predict():
         logger.warning("Prediction request missing file")
         sys.stdout.flush()
         return jsonify({"error": "No file uploaded"}), 400
-    
+
     file = request.files['file']
     if file.filename == '':
         logger.warning("Prediction request with empty filename")
@@ -137,7 +183,7 @@ def predict():
 
     try:
         logger.info(f"Processing prediction for: {file.filename}")
-        
+
         # Load and preprocess image
         image = Image.open(file).convert('RGB')
         input_tensor = transform(image).unsqueeze(0).to(device)
@@ -147,11 +193,11 @@ def predict():
             outputs = model(input_tensor)
             probs = torch.softmax(outputs, dim=1)
             confidence, pred_idx = torch.max(probs, 1)
-            
+
             # Get predicted class (lowercase from model)
             predicted_class = CLASSES[pred_idx.item()]
             conf_score = confidence.item()
-            
+
             # Capitalize for display
             display_class = predicted_class.capitalize()
 
@@ -168,6 +214,7 @@ def predict():
         sys.stdout.flush()
         return jsonify({"error": str(e)}), 500
 
+
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint"""
@@ -178,18 +225,19 @@ def health():
     }
     return jsonify(status), 200
 
+
 # ------------------------------------------------------------------
 # MAIN
 # ------------------------------------------------------------------
 if __name__ == '__main__':
     # Initialize app (logger, device, model)
     initialize_app()
-    
+
     logger.info("\n" + "=" * 60)
-    logger.info("Starting Flask server on http://0.0.0.0:5001")
+    logger.info("Starting Flask server on http://localhost:5000")
     logger.info("Press Ctrl+C to stop the server")
     logger.info("=" * 60 + "\n")
     sys.stdout.flush()
-    
+
     # Run Flask app
-    app.run(host='0.0.0.0', port=5001, debug=True, use_reloader=False)
+    app.run(host='0.0.0.0', port=5000, debug=False)

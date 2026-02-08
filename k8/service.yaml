@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: heart-disease-service
+  name: cats-dogs-service
   labels:
-    app: heart-disease-app
+    app: cats-dogs-app
 spec:
   type: LoadBalancer
   selector:
-    app: heart-disease-app
+    app: cats-dogs-app
   ports:
     - name: http
       protocol: TCP
