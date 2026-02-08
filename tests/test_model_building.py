@@ -1,51 +1,33 @@
-import unittest
-import pandas as pd
-import numpy as np
-from src.model_building.train_model import prepare_data
+import pytest
+import torch
+import torch.nn as nn
+from src.model_building import train_model
 
-class TestModelBuilding(unittest.TestCase):
-    def setUp(self):
-        """Creates a sample dataframe for model building tests."""
-        data = {
-            'age': [63, 37, 41, 56, 50, 45],
-            'sex': [1, 1, 0, 1, 0, 1],
-            'cp': [3, 2, 1, 1, 0, 2],
-            'trestbps': [145, 130, 130, 120, 110, 135],
-            'chol': [233, 250, 204, 236, 200, 220],
-            'fbs': [1, 0, 0, 0, 0, 0],
-            'restecg': [0, 1, 0, 1, 0, 1],
-            'thalach': [150, 187, 172, 178, 160, 155],
-            'exang': [0, 0, 0, 0, 1, 0],
-            'oldpeak': [2.3, 3.5, 1.4, 0.8, 1.0, 0.5],
-            'slope': [0, 0, 2, 2, 1, 1],
-            'ca': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            'thal': ['1', '2', '2', '2', '1', '3'],
-            'target': [1, 1, 1, 0, 0, 0]
-        }
-        self.sample_prepared_data = pd.DataFrame(data)
+class TestModelBuilding:
+    def test_build_model_structure(self):
+        """Test that the model is built with the correct head."""
+        num_classes = 2
+        model = train_model.build_model(num_classes)
+        
+        # Check if it's a ResNet
+        assert hasattr(model, "fc")
+        
+        # Check if final layer has correct output features
+        assert isinstance(model.fc, nn.Linear)
+        assert model.fc.out_features == num_classes
 
-    def test_prepare_data_splitting(self):
-        """Test that data is split correctly into train and test sets."""
-        # Ensure target exists
-        self.assertIn('target', self.sample_prepared_data.columns)
+    def test_model_forward_pass(self):
+        """Test a dummy forward pass to ensure the model runs."""
+        num_classes = 2
+        model = train_model.build_model(num_classes)
+        model.eval()
         
-        X_train, X_test, y_train, y_test = prepare_data(self.sample_prepared_data)
+        # Create a dummy batch: (Batch Size, Channels, Height, Width)
+        # ResNet expects 3 channels, 224x224 usually
+        dummy_input = torch.randn(1, 3, 224, 224).to(train_model.DEVICE)
         
-        # Check split ratio (approx 80/20)
-        total_rows = len(self.sample_prepared_data)
-        self.assertEqual(len(X_train) + len(X_test), total_rows)
-        self.assertEqual(len(y_train) + len(y_test), total_rows)
+        with torch.no_grad():
+            output = model(dummy_input)
         
-        # Check that target is removed from X
-        self.assertNotIn('target', X_train.columns)
-        self.assertNotIn('target', X_test.columns)
-
-    def test_prepare_data_float_casting(self):
-        """Test that integer features are cast to float64."""
-        # Force an integer column in input
-        self.sample_prepared_data['age'] = self.sample_prepared_data['age'].astype(int)
-        
-        X_train, X_test, _, _ = prepare_data(self.sample_prepared_data)
-        
-        self.assertEqual(X_train['age'].dtype, 'int64')
-        self.assertEqual(X_test['age'].dtype, 'int64')
+        # Output shape should be (1, num_classes)
+        assert output.shape == (1, num_classes)
