@@ -101,6 +101,9 @@ def get_dataloaders():
     for split in ["train", "val", "test"]:
         dataset = datasets.ImageFolder(DATA_ROOT / split, transform=transform)
 
+        if split == "train":
+            class_names = dataset.classes
+
         if IS_CI:
             # Use only a small subset for smoke testing
             subset_size = min(len(dataset), 100) # 100 images (~3 batches)
@@ -114,7 +117,6 @@ def get_dataloaders():
             pin_memory=(DEVICE.type == "cuda")
         )
 
-        datasets_map[split] = dataset
         loaders[split] = loader
 
         logger.info(
@@ -122,7 +124,7 @@ def get_dataloaders():
             f"Images: {len(dataset)} | Batches: {len(loader)}"
         )
 
-    return loaders, datasets_map["train"].classes
+    return loaders, class_names
 
 # ------------------------------------------------------------------
 # MODEL
