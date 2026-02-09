@@ -15,6 +15,8 @@ import os
 import sys
 import time
 import logging
+import datetime
+import json
 import numpy as np
 import torch
 import mlflow
@@ -22,7 +24,7 @@ import mlflow.pytorch
 
 from pathlib import Path
 from torch import nn, optim, amp
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms, models
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 
@@ -49,10 +51,15 @@ DATA_ROOT = PROJECT_ROOT / "data" / "transformed"
 # ------------------------------------------------------------------
 # TRAINING CONFIG
 # ------------------------------------------------------------------
+IS_CI = os.getenv("CI", "false").lower() == "true"
+
 IMAGE_SIZE = 224
 BATCH_SIZE = 32
-EPOCHS = 5
+EPOCHS = 1 if IS_CI else 5
 LR = 1e-4
+
+if IS_CI:
+    logger.warning("CI ENVIRONMENT DETECTED — RUNNING IN SMOKE TEST MODE (1 Epoch, Reduced Data)")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 NUM_WORKERS = 0 if os.name == "nt" else os.cpu_count() // 2
@@ -93,6 +100,12 @@ def get_dataloaders():
 
     for split in ["train", "val", "test"]:
         dataset = datasets.ImageFolder(DATA_ROOT / split, transform=transform)
+
+        if IS_CI:
+            # Use only a small subset for smoke testing
+            subset_size = min(len(dataset), 100) # 100 images (~3 batches)
+            dataset = Subset(dataset, range(subset_size))
+
         loader = DataLoader(
             dataset,
             batch_size=BATCH_SIZE,
@@ -205,6 +218,7 @@ def main():
     # Create models directory for DVC output
     models_dir = PROJECT_ROOT / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
+    report_path = PROJECT_ROOT / "src" / "model_building" / "model_performance_report.md"
 
     mlflow.set_tracking_uri("sqlite:///mlflow.db")
     mlflow.set_experiment("Cats vs Dogs CNN")
@@ -256,6 +270,33 @@ def main():
 
         test_metrics = evaluate(model, loaders["test"], "test")
         mlflow.log_metrics({f"test_{k}": v for k, v in test_metrics.items()})
+
+        # Generate Model Performance Report
+        report_content = f"""# Model Performance Report
+
+*Report generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+
+*MLflow Experiment: 'Cats vs Dogs CNN'*
+
+## Best Model: ResNet18
+
+- **MLflow Run ID**: `{best_run_id if best_run_id else mlflow.active_run().info.run_id}`
+- **Device**: `{DEVICE}`
+- **Epochs**: {EPOCHS}
+- **Batch Size**: {BATCH_SIZE}
+- **Learning Rate**: {LR}
+- **Image Size**: {IMAGE_SIZE}
+
+### Metrics (Test Set - Final Epoch)
+- **Accuracy**: {test_metrics.get('accuracy', 0.0):.4f}
+- **Precision**: {test_metrics.get('precision', 0.0):.4f}
+- **Recall**: {test_metrics.get('recall', 0.0):.4f}
+- **F1-Score**: {test_metrics.get('f1', 0.0):.4f}
+- **ROC-AUC**: {test_metrics.get('roc_auc', 0.0):.4f}
+"""
+        with open(report_path, "w") as f:
+            f.write(report_content)
+        logger.info(f"Model performance report saved to {report_path}")
 
     if best_run_id:
         mlflow.register_model(
