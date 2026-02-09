@@ -1,0 +1,188 @@
+schema: '2.0'
+stages:
+  data_ingestion:
+    cmd: python src/data_ingestion/ingestion.py
+    deps:
+    - path: src/data_ingestion/ingestion.py
+      hash: md5
+      md5: 9060423d7978eb12e981d43eebc939b7
+      size: 4141
+    params:
+      params.yaml:
+        data_ingestion:
+          dataset: bhavikjikadara/dog-and-cat-classification-dataset
+          source: kaggle
+          raw_output_path: data/raw
+        paths.raw_data: data/raw
+    outs:
+    - path: data/raw
+      hash: md5
+      md5: 8467ce11580412ec0b77ca194007550a.dir
+      size: 848866410
+      nfiles: 24998
+  data_validation:
+    cmd: python src/data_validation/validation.py
+    deps:
+    - path: data/raw
+      hash: md5
+      md5: 8467ce11580412ec0b77ca194007550a.dir
+      size: 848866410
+      nfiles: 24998
+    - path: src/data_validation/validation.py
+      hash: md5
+      md5: 19d5b5ad07d03a712cec3c0cc6ebd99d
+      size: 4372
+    params:
+      params.yaml:
+        data_validation:
+          expected_classes:
+          - cat
+          - dog
+          valid_extensions:
+          - .jpg
+          - .jpeg
+          - .png
+          min_samples_per_class: 100
+          max_imbalance_ratio: 2.0
+          report_output: reports/validation
+    outs:
+    - path: reports/validation
+      hash: md5
+      md5: 1ed000ff76bbce13e62c06ebf14e2cf2.dir
+      size: 117
+      nfiles: 1
+  data_preparation:
+    cmd: python src/data_preparation/preparation.py
+    deps:
+    - path: data/raw
+      hash: md5
+      md5: 8467ce11580412ec0b77ca194007550a.dir
+      size: 848866410
+      nfiles: 24998
+    - path: src/data_preparation/preparation.py
+      hash: md5
+      md5: 8f34b674bafce256f6b2e37888ee2348
+      size: 6455
+    params:
+      params.yaml:
+        data_preparation:
+          raw_input_path: data/raw/PetImages
+          prepared_output_path: data/prepared
+          eda_output_path: artifacts/eda
+          valid_extensions:
+          - .jpg
+          - .jpeg
+          - .png
+          - .bmp
+          expected_classes:
+          - cat
+          - dog
+        global.random_seed: 42
+    outs:
+    - path: artifacts/eda
+      hash: md5
+      md5: 919150a0919c34ba2ad09f38d9815afc.dir
+      size: 3083484
+      nfiles: 6
+    - path: data/prepared
+      hash: md5
+      md5: 6413dd89c27f15c0b0baa4bed7262b46.dir
+      size: 6454608
+      nfiles: 2
+  data_transformation:
+    cmd: python src/data_transformation/transformation.py
+    deps:
+    - path: data/raw
+      hash: md5
+      md5: 8467ce11580412ec0b77ca194007550a.dir
+      size: 848866410
+      nfiles: 24998
+    - path: src/data_transformation/transformation.py
+      hash: md5
+      md5: ae9d882a2c721706b784fe693b2b3e8f
+      size: 3846
+    params:
+      params.yaml:
+        data_transformation:
+          raw_input_path: data/raw/PetImages
+          transformed_output_path: data/transformed
+          image_size:
+          - 224
+          - 224
+          splits:
+            train: 0.8
+            val: 0.1
+            test: 0.1
+          random_state: 42
+          image_format: JPEG
+          image_quality: 95
+    outs:
+    - path: data/transformed
+      hash: md5
+      md5: 45e8e3f042f9828445f65d2474891d03.dir
+      size: 565081910
+      nfiles: 24998
+  model_training:
+    cmd: python src/model_building/train_model.py
+    deps:
+    - path: data/transformed
+      hash: md5
+      md5: 45e8e3f042f9828445f65d2474891d03.dir
+      size: 565081910
+      nfiles: 24998
+    - path: src/model_building/train_model.py
+      hash: md5
+      md5: 160964c14027b137af404a93fffc4812
+      size: 12260
+    params:
+      params.yaml:
+        global.random_seed: 42
+        model_training:
+          architecture: resnet18
+          pretrained: true
+          num_classes: 2
+          hyperparameters:
+            batch_size: 32
+            epochs: 5
+            learning_rate: 0.0001
+            optimizer: adam
+            loss_function: cross_entropy
+          data:
+            image_size: 224
+            normalization:
+              mean:
+              - 0.485
+              - 0.456
+              - 0.406
+              std:
+              - 0.229
+              - 0.224
+              - 0.225
+            num_workers: 0
+          device:
+            use_cuda: true
+            use_amp: true
+          mlflow:
+            tracking_uri: sqlite:///mlflow.db
+            experiment_name: Cats vs Dogs CNN
+            registered_model_name: CatsDogsCNN
+            run_name_prefix: ResNet18
+          output:
+            model_path: models
+            checkpoint_path: models/checkpoints
+          metrics:
+          - accuracy
+          - precision
+          - recall
+          - f1
+          - roc_auc
+    outs:
+    - path: mlflow.db
+      hash: md5
+      md5: eef18d63acaa2721d4c3448c4edffcd1
+      size: 565248
+    - path: models
+      hash: md5
+      md5: a833146e2f53355b3ef4f84472063313.dir
+      size: 89584475
+      nfiles: 7

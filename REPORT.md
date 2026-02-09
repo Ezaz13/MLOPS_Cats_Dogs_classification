@@ -1,5 +1,5 @@
 # MLOps Assignment Report
-# Title: Heart Disease UCI Dataset
+# Title: Cats vs Dogs Classification (Computer Vision)
 
 # Group 130
 
@@ -17,12 +17,13 @@
 ### Prerequisites
 -   **OS**: Windows, macOS, or Linux.
 -   **Tools**: Python 3.9+, Git, Docker Desktop.
+-   **Hardware**: GPU recommended (CUDA) for faster training, but CPU is supported.
 
 ### Step-by-Step Guide
 1.  **Clone the Repository**
     ```bash
-    git clone https://github.com/Ezaz13/MLOPS-Heart-Disease.git
-    cd Heart-Disease-Prediction-Project
+    git clone https://github.com/Ezaz13/MLOPS_Cats_Dogs_classification.git
+    cd Cats_Dogs_Classification-Project
     ```
 
 2.  **Environment Setup**
@@ -36,153 +37,200 @@
 
 3.  **Install Requirements**
     ```bash
+    # For development (full dependencies including DVC, testing, EDA)
     pip install -r requirements.txt
     ```
+    
+    **Requirements Files**:
+    | File | Purpose |
+    | :--- | :--- |
+    | `requirements.txt` | Full development dependencies (DVC, Great Expectations, PyTorch with GPU, testing, visualization) |
+    | `requirements-prod.txt` | Minimal production dependencies for Docker (Flask, PyTorch CPU-only, MLflow) |
 
-4.  **Run End-to-End Pipeline**
-    Execute the full pipeline (Ingestion -> Validation -> Preparation -> Transformation -> Model Building):
+4.  **Configure Kaggle Credentials**
+    The dataset is downloaded from Kaggle. Set up credentials:
     ```bash
-    python src/data_pipeline_orchestrator/pipeline.py
+    # Create .env file with:
+    KAGGLE_USERNAME=your_username
+    KAGGLE_KEY=your_api_key
     ```
-    **Pipeline Flow**:
-    The script executes the following DAG sequentially, waiting for each task to complete:
-    1.  **Data Ingestion** (`src/data_ingestion/ingestion.py`):
-        -   Downloads the dataset directly from the UCI Machine Learning Repository URL.
-        -   Implements retry logic (3 attempts) to handle network instability.
-        -   Saves the raw CSV to `data/raw/uci` with a timestamp.
-    2.  **Data Validation** (`src/data_validation/validation.py`):
-        -   Uses **Great Expectations** to validate the downloaded data against a defined schema.
-        -   Checks column order, non-null constraints for critical fields (`age`, `sex`, `target`), and value ranges (e.g., `age` between 20-100).
-        -   Generates validation reports and raises an error if integrity checks fail.
-    3.  **Data Preparation** (`src/data_preparation/preparation.py`):
-        -   Handles data cleaning (replacing '?' with NaN).
-        -   Normalizes the target variable to binary (0/1).
-        -   Generates comprehensive EDA reports (histograms, boxplots, correlation matrices).
-        -   **Output Location**: All EDA artifacts are saved to `artifacts/eda/eda_run_<timestamp>/`.
-        -   Performs initial preprocessing: Imputes missing values, scales numerical features (`StandardScaler`), and One-Hot Encodes categorical variables.
-        -   Saves the processed dataset to `data/prepared`.
-    4.  **Data Transformation** (`src/data_transformation/transformation.py`):
-        -   Loads the prepared data and performs Feature Engineering.
-        -   Creates derived features:
-            -   **Rate Pressure Product**: `thalach` * `trestbps`.
-            -   **Age Groups**: Quantile binning of age ranges.
-            -   **High Risk Flag**: Composite indicator based on `oldpeak` and `ca` thresholds.
-        -   Saves the augmented dataset to `data/transformed`.
-    5.  **Model Building** (`src/model_building/train_model.py`):
-        -   Loads the transformed dataset.
-        -   Splits data into training and testing sets (Stratified Split).
-        -   Defines a training pipeline (including redundant scaling/encoding for robustness).
-        -   Trains/Evaluates three models (Logistic Regression, Random Forest, Gradient Boosting).
-        -   Logs all params, metrics, and artifacts to **MLflow** and registers the best model.
 
-5.  **Start API Server**
+5.  **Run End-to-End Pipeline with DVC**
+    The project uses **DVC (Data Version Control)** for reproducible ML pipelines. Execute the full pipeline:
+    ```bash
+    # Run the complete pipeline
+    dvc repro
+    
+    # Or run individual stages
+    dvc repro data_ingestion
+    dvc repro data_validation
+    dvc repro data_preparation
+    dvc repro data_transformation
+    dvc repro model_training
+    ```
+    
+    **Useful DVC Commands**:
+    ```bash
+    # View pipeline DAG
+    dvc dag
+    
+    # Check pipeline status
+    dvc status
+    
+    # Force re-run all stages
+    dvc repro --force
+    ```
+
+    **DVC Pipeline Stages** (defined in `dvc.yaml`):
+    | Stage | Script | Outputs |
+    | :--- | :--- | :--- |
+    | `data_ingestion` | `src/data_ingestion/ingestion.py` | `data/raw/` |
+    | `data_validation` | `src/data_validation/validation.py` | `reports/validation/` |
+    | `data_preparation` | `src/data_preparation/preparation.py` | `data/prepared/`, `artifacts/eda/` |
+    | `data_transformation` | `src/data_transformation/transformation.py` | `data/transformed/` |
+    | `model_training` | `src/model_building/train_model.py` | `models/`, `mlflow.db` |
+
+    **Pipeline Flow**:
+    1.  **Data Ingestion**:
+        -   Downloads the Cats & Dogs dataset from Kaggle (`bhavikjikadara/dog-and-cat-classification-dataset`).
+        -   Saves raw images to `data/raw/PetImages`.
+    2.  **Data Validation**:
+        -   Uses **Great Expectations** to validate the downloaded images.
+        -   Checks for valid extensions (`.jpg`, `.jpeg`, `.png`), expected classes (`cat`, `dog`), and minimum samples per class.
+        -   Generates validation reports in `reports/validation`.
+    3.  **Data Preparation**:
+        -   Cleans corrupt/invalid images.
+        -   Generates EDA reports (sample distributions, class balance).
+        -   **Output Location**: EDA artifacts saved to `artifacts/eda/`.
+    4.  **Data Transformation**:
+        -   Resizes all images to 224x224 pixels.
+        -   Splits data into train (80%), validation (10%), and test (10%) sets.
+        -   Saves transformed images to `data/transformed/train`, `data/transformed/val`, `data/transformed/test`.
+    5.  **Model Training**:
+        -   Uses **Transfer Learning with ResNet18** (pretrained on ImageNet).
+        -   Trains with Adam optimizer, Cross-Entropy Loss, and AMP (Automatic Mixed Precision).
+        -   Logs all params, metrics, and artifacts to **MLflow**.
+        -   Registers the best model as `CatsDogsCNN` in MLflow Model Registry.
+    
+    **Parameters**: All pipeline parameters are centralized in `params.yaml` for easy configuration.
+
+6.  **Start API Server**
     ```bash
     python src/model_serving/app.py
     ```
+
 7.  **Validate Deployment**
-    Ensure the service is running correctly using the provided validation script or UI:
-    -   **CLI Test (Batch)**: Run the batch validation script to test multiple scenarios against the API.
+    -   **Health Check**:
         ```bash
-        python src/model_serving/validate_deployment.py
+        curl http://localhost:5000/health
         ```
     -   **CLI Test (Single Request)**:
         ```bash
-        curl -X POST http://localhost:5000/predict -d '{"age":63, "sex":1, "cp":3, "trestbps":145, "chol":233, "fbs":1, "restecg":0, "thalach":150, "exang":0, "oldpeak":2.3, "slope":0, "ca":0, "thal":1}'
+        curl -X POST -F "file=@path/to/cat_or_dog_image.jpg" http://localhost:5000/predict
         ```
     -   **UI Test**: Open a browser and navigate to:
         ```
         http://localhost:5000/
         ```
-        This loads `index.html`, where you can manually input patient data and get real-time predictions.
+        This loads a modern web UI where you can upload an image and get real-time predictions with confidence scores.
 
 ## 2. EDA and Modelling Choices
 
-### Exploratory Data Analysis (EDA)
-The data preparation pipeline (`src/data_preparation/preparation.py`) generates comprehensive analysis reports to guide feature engineering.
+### Dataset
+-   **Source**: Kaggle - "Dog and Cat Classification Dataset"
+-   **Classes**: `cat`, `dog` (Binary Classification)
+-   **Total Images**: ~25,000 images (balanced between classes)
 
--   **Artifact Location**: All EDA outputs are automatically saved to:
-    `artifacts/eda/eda_run_<YYYYMMDD_HHMMSS>/`
+### Exploratory Data Analysis (EDA)
+The data preparation pipeline generates analysis reports to validate data quality:
+
+-   **Artifact Location**: `artifacts/eda/`
 -   **Generated Insights**:
-    1.  **Summary Statistics**: saved as `summary_statistics.csv`.
-    2.  **Distributions**: Histograms showing the distribution of numerical features (like `age`, `chol`) segmented by the target variable (Disease vs. No Disease).
-    3.  **Outlier Detection**: Boxplots for numerical features to identify anomalies.
-    4.  **Categorical Analysis**: Count plots for features like `cp` (chest pain) and `exang` (exercise angina).
-    5.  **Correlation Analysis**: A heatmap (`numeric_correlation_heatmap.png`) visualizing relationships between features.
--   **Key Findings**:
-    -   **Target Balance**: The dataset is balanced, eliminating the immediate need for SMOTE.
-    -   **Predictive Features**: `cp` (Type 3) and `oldpeak` showed strong differentiation between positive/negative cases.
+    1.  **Class Distribution**: Verified balanced dataset between cats and dogs.
+    2.  **Image Validation**: Identified and removed corrupt/invalid images.
+    3.  **Sample Visualization**: Preview of sample images from each class.
 
 ### Preprocessing Pipeline
-To ensure robust model training, the following transformations are applied:
-1.  **Missing Value Imputation**: Median for numerical columns, Mode for categorical.
-2.  **Scaling**: `StandardScaler` to normalize numerical features (`age`, `chol`, etc.).
-3.  **Encoding**: One-Hot Encoding for categorical variables.
+Images are transformed consistently for model training:
+1.  **Resize**: All images scaled to 224x224 pixels.
+2.  **Normalization**: ImageNet statistics applied:
+    -   Mean: `[0.485, 0.456, 0.406]`
+    -   Std: `[0.229, 0.224, 0.225]`
+3.  **Data Splits**: 80% train, 10% validation, 10% test (stratified).
 
 ### Modelling Methodology
-We evaluated three diverse algorithms using **Stratified K-Fold Cross-Validation (K=5)** to ensure the model generalizes well to unseen data.
+We use **Transfer Learning** with a pretrained ResNet18 architecture for efficient and accurate classification.
 
-#### Model Performance Comparison
+#### Model Architecture
+| Component | Configuration |
+| :--- | :--- |
+| **Base Model** | ResNet18 (pretrained on ImageNet) |
+| **Final Layer** | Linear (512 → 2 classes) |
+| **Optimizer** | Adam (LR: 1e-4) |
+| **Loss Function** | Cross-Entropy |
+| **Training Device** | CUDA GPU (with CPU fallback) |
 
-| Model | CV ROC-AUC (Mean) | Test Accuracy | Precision | Recall | F1 Score |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Logistic Regression** | **0.9009** | 0.8689 | 0.8125 | **0.9286** | 0.8667 |
-| Random Forest | 0.8840 | **0.8852** | 0.8387 | 0.9286 | **0.8814** |
-| Gradient Boosting | 0.8528 | 0.8689 | 0.8125 | 0.9286 | 0.8667 |
+#### Training Configuration
+| Parameter | Value |
+| :--- | :--- |
+| Image Size | 224x224 |
+| Batch Size | 32 |
+| Epochs | 5 (configurable in `params.yaml`) |
+| Learning Rate | 0.0001 |
+| Mixed Precision | Enabled (AMP) |
 
+#### Model Performance Metrics
+The model is evaluated on the test set with the following metrics:
+
+| Metric | Description |
+| :--- | :--- |
+| **Accuracy** | Overall correct predictions |
+| **Precision** | True positives / (True positives + False positives) |
+| **Recall** | True positives / (True positives + False negatives) |
+| **F1-Score** | Harmonic mean of Precision and Recall |
+| **ROC-AUC** | Area under the ROC curve |
 
 #### Selection Logic
-The automated selection logic (defined in `src/model_building/train_model.py`) prioritizes **F1 Score** as the primary metric for stability, particularly for imbalanced datasets or costs of errors.
-
-**Why F1 Score?**
-The F1 Score is the harmonic mean of Precision and Recall. In the context of Heart Disease prediction:
--   **High Recall** is crucial: We must not miss any positive cases (False Negatives), as failing to diagnose a patient could be fatal.
--   **Precision matters**: We also want to minimize False Positives to avoid unnecessary treatment and anxiety.
-F1 Score provides a single metric that balances these two competing objectives, ensuring the model is robust and reliable for medical diagnosis, rather than just being accurate on the majority class.
-
-> **Selected Model: Random Forest**
->
-> **Random Forest** was selected because it achieved the highest **F1 Score (0.8814)**. This balanced metric ensures that the model maintains a good trade-off between Precision and Recall, which is critical for medical diagnosis where both false positives and false negatives carry significant costs. Additionally, it maintained a high Test Accuracy (0.8852) and strong Recall (0.9286).
+The automated selection logic prioritizes **F1 Score** as the primary metric. The best performing model during training is automatically saved and registered in MLflow.
 
 ## 3. Experiment Tracking Summary
 
-We successfully integrated **MLflow** to track the entire machine learning lifecycle, ensuring reproducibility and observability.
+We integrated **MLflow** to track the entire machine learning lifecycle, ensuring reproducibility and observability.
 
 ### 3.1 Configuration & Setup
 -   **Backend Store**: SQLite (`sqlite:///mlflow.db`) for lightweight local metadata storage.
--   **Artifact Store**: Local directory `mlruns/` for storing models and plots.
--   **Experiment Name**: `Heart Disease Prediction`
+-   **Artifact Store**: Local directory `mlruns/` for storing models and training artifacts.
+-   **Experiment Name**: `Cats vs Dogs CNN`
+-   **Run Name**: `ResNet18_GPU`
 
 ### 3.2 Tracked Metrics & Parameters
-For each training iteration, the following were logged:
--   **Hyperparameters**: Model-specific configs (e.g., Logistic Regression `C=0.1`, Random Forest `n_estimators=100`).
--   **Performance Metrics**:
-    -   Primary: **CV ROC-AUC** (Used for selection).
-    -   Secondary: Recall (Critical for healthcare), Precision, F1-Score, and Accuracy.
--   **Tags**: Metadata for searchability:
-    -   `domain`: "healthcare"
-    -   `problem_type`: "binary_classification"
+For each training run, the following are logged:
+-   **Hyperparameters**:
+    -   `architecture`: ResNet18
+    -   `epochs`: Number of training epochs
+    -   `batch_size`: 32
+    -   `learning_rate`: 0.0001
+    -   `image_size`: 224
+    -   `device`: cuda/cpu
+-   **Performance Metrics** (per epoch):
+    -   `train_loss`: Training loss
+    -   `val_accuracy`, `val_precision`, `val_recall`, `val_f1`, `val_roc_auc`
+-   **Test Metrics** (final):
+    -   `test_accuracy`, `test_precision`, `test_recall`, `test_f1`, `test_roc_auc`
 
-### 3.3 Recorded Runs (Sample)
-Based on the latest experiment cycle:
-
-| Model | Run ID | Status | Key Result |
-| :--- | :--- | :--- | :--- |
-| **Random Forest** | `57ecee26e31d450d8e4f3e7ed35781ab` | **Registered** | **Highest F1 Score (0.8814)** |
-| Logistic Regression | `1ba457450f2641a69d41a89a44639546` | Archived | F1 Score: 0.8667 |
-| Gradient Boosting | `ea2881acdae34c1fad7cb07d78d0f4fb` | Archived | F1 Score: 0.8667 |
-
-### 3.4 Model Registry & Artifacts
+### 3.3 Model Registry & Artifacts
 -   **Artifacts Preserved**:
-    -   `model.pkl`: The serialized Scikit-learn pipeline.
+    -   `model/`: The serialized PyTorch model (MLflow format).
     -   `MLmodel`: Metadata defining the model flavor and dependencies.
     -   `conda.yaml` / `requirements.txt`: Environment definitions for reproduction.
-    -   `input_example.json`: A sample of the training data (first 5 rows) to validate schema during serving.
-
 -   **Registration Strategy**:
-    The training script automatically compares the `f1_score` of all candidates. The model with the highest score (Random Forest) was programmatically registered in the MLflow Model Registry as:
-    -   **Model Name**: `HeartDiseaseModel`
-    -   **Version**: `2`
+    The training script automatically registers the best model in the MLflow Model Registry as:
+    -   **Model Name**: `CatsDogsCNN`
     -   **Stage**: Ready for Production / Deployment.
+
+### 3.4 Model Export
+-   The best model is also exported to `models/model_export/` in MLflow format for Docker containerization.
+-   A performance report is generated at `src/model_building/model_performance_report.md`.
 
 ## 4. Architecture Diagram
 
@@ -191,25 +239,31 @@ The system follows a microservices architecture pattern with offline training an
 ```mermaid
 graph TD
     subgraph "Data Pipeline Orchestrator"
-        Ingest[Data Ingestion<br/>(ingestion.py)] --> Validate[Data Validation<br/>(validation.py)]
-        Validate --> Prep[Data Preparation<br/>(preparation.py)]
-        Prep --> Transform[Data Transformation<br/>(transformation.py)]
-        Transform --> Train[Model Building<br/>(train_model.py)]
+        Ingest[Data Ingestion<br/>(Kaggle Download)] --> Validate[Data Validation<br/>(Great Expectations)]
+        Validate --> Prep[Data Preparation<br/>(EDA & Cleaning)]
+        Prep --> Transform[Data Transformation<br/>(Resize & Split)]
+        Transform --> Train[Model Training<br/>(ResNet18 CNN)]
     end
 
     subgraph "MLOps Infrastructure"
-        Train -->|Log Metrics & Model| MLflow[MLflow Tracking<br/>(SQLite/Local)]
-        MLflow -->|Register Best Model| Registry[Model Registry]
+        Train -->|Log Metrics & Model| MLflow[MLflow Tracking<br/>(SQLite)]
+        MLflow -->|Register Best Model| Registry[Model Registry<br/>(CatsDogsCNN)]
     end
 
     subgraph "Production Deployment"
-        Registry -->|Load Model| App[Flask Service<br/>(app.py)]
+        Registry -->|Load Model| App[Flask API<br/>(app.py)]
         App -->|Containerize| Docker[Docker Image]
         Docker -->|Deploy| K8s[Kubernetes Cluster]
-        K8s -->|Expose| API[REST API]
+        K8s -->|Expose| API[REST API :5000]
     end
 
-    User[End User] -->|POST Predictions| API
+    subgraph "Monitoring"
+        App -->|Metrics| Prometheus[Prometheus<br/>(prometheus-flask-exporter)]
+        Prometheus --> Grafana[Grafana Dashboard]
+    end
+
+    User[End User] -->|Upload Image| API
+    API -->|Cat/Dog Prediction| User
 ```
 
 ## 5. CI/CD and Deployment Workflow
@@ -221,48 +275,61 @@ Managed via **GitHub Actions** (`.github/workflows/ci_cd_pipeline.yml`).
 
     #### 1. Build, Test, and Train (`build-test-train`)
     -   **Environment**: Ubuntu runner with Python 3.9.
-    -   **Linting**: Uses `flake8` to enforce PEP8 standards (max line length: 127).
+    -   **Linting**: Uses `flake8` to enforce PEP8 standards.
     -   **Unit Testing**: Executes `pytest` on the `tests/` directory.
-    -   **Pipeline Execution**: Runs `src/data_pipeline_orchestrator/pipeline.py` to execute data ingestion, validation, transformation, and model training.
-    -   **Artifact Archival**: Uploads critical artifacts for subsequent jobs:
-        -   `mlflow-runs` and `mlflow.db`: Preserves the trained model and tracking database.
-        -   `model-performance-report`: Markdown summary.
-        -   `validation-reports`: Data quality checks.
-        -   `pipeline-logs`: Execution logs.
+    -   **Pipeline Execution**: Runs the full data pipeline including model training.
+    -   **Artifact Archival**:
+        -   `mlflow-runs` and `mlflow.db`: Trained model and tracking database.
+        -   `model-export`: Exported model for Docker.
+        -   `model-performance-report`: Markdown summary of metrics.
+        -   `validation-reports` and `pipeline-logs`.
 
-    #### 2. Docker Build & Push (`docker-build-push`)
+    #### 2. Build and Deploy (`build-and-deploy`)
     -   **Condition**: Runs only on `push` events.
-    -   **Artifact Retrieval**: Downloads `mlflow-runs` and `mlflow.db` from the build job to include the trained model in the image.
-    -   **Build**: Uses Docker Buildx to build the image from the `Dockerfile`.
-    -   **Push**: Pushes the image to Docker Hub tagged with `latest` and the commit SHA.
-
-    #### 3. Kubernetes Deployment Test (`deploy-k8s-kind`)
-    -   **Condition**: Runs only on `push` events.
-    -   **Environment**: Sets up a **Kind (Kubernetes in Docker)** cluster directly on the runner.
+    -   **Docker Build**: Uses Docker Buildx to build the image from the `Dockerfile`.
+    -   **Kind Cluster**: Creates a local Kubernetes cluster using Kind.
     -   **Deployment**:
-        -   Pulls the newly built image.
-        -   Loads the image into the Kind cluster.
+        -   Loads the Docker image into Kind.
         -   Applies `k8/deployment.yaml` and `k8/service.yaml`.
-        -   Updates the deployment to use the specific image version (SHA).
-    -   **Verification**: Waits for the rollout to complete (`kubectl rollout status`) and logs cluster status.
+    -   **Smoke Tests**: Runs automated tests against the deployed service.
+    -   **Verification**: Validates rollout with `kubectl rollout status`.
 
 ### Deployment Configuration
+
 -   **Containerization** (`Dockerfile`):
     -   **Base Image**: `python:3.10-slim`.
-    -   ** Configuration**: Sets `MLFLOW_TRACKING_URI` to `sqlite:////app/mlflow.db`.
+    -   **Model Bundling**: Copies `models/model_export` to `/app/model`.
+    -   **Environment**: Sets `MLFLOW_TRACKING_URI` for model loading.
     -   **Exposed Port**: 5000.
-    -   **Entrypoint**: Starts the Flask application (`src/model_serving/app.py`).
+    -   **Entrypoint**: Starts the Flask application.
 
 -   **Orchestration** (`k8/` directory):
-    -   **Deployment** (`deployment.yaml`): Manages application replicas for high availability and defines resource constraints.
-    -   **Service** (`service.yaml`): Exposes the application to external traffic using a LoadBalancer strategy.
-    -   **Monitoring** (`service-monitor.yaml`): Configures Prometheus scraping for real-time metrics.
+    -   **Deployment** (`deployment.yaml`):
+        -   **Replicas**: 2 for high availability.
+        -   **Resources**: CPU/Memory limits configured.
+        -   **Health Probes**: Readiness and liveness probes on `/health`.
+    -   **Service** (`service.yaml`): Exposes the application via LoadBalancer on port 5000.
+    -   **Monitoring** (`service-monitor.yaml`): Configures Prometheus scraping for metrics.
+
+### Flask API Endpoints
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/` | GET | Web UI for image upload and prediction |
+| `/predict` | POST | Accepts image file, returns prediction and confidence |
+| `/health` | GET | Health check endpoint for Kubernetes probes |
+| `/metrics` | GET | Prometheus metrics endpoint |
+
+### Monitoring Stack
+-   **Prometheus**: Scrapes application metrics via `prometheus-flask-exporter`.
+-   **Grafana**: Visualizes metrics dashboards.
+-   **Loki + Promtail**: Log aggregation and viewing.
 
 ## 6. Link to Code Repository
 
-[https://github.com/Ezaz13/MLOPS-Heart-Disease.git](https://github.com/Ezaz13/MLOPS-Heart-Disease.git)
+[https://github.com/Ezaz13/MLOPS_Cats_Dogs_classification.git](https://github.com/Ezaz13/MLOPS_Cats_Dogs_classification.git)
 
 
-## 6. Link to Application walkthrough recording
+## 7. Link to Application Walkthrough Recording
 
 https://wilpbitspilaniacin0-my.sharepoint.com/:v:/g/personal/2024aa05083_wilp_bits-pilani_ac_in/IQByKQZjA01pTZDbOenZWesFAWihpS3Pcps-bkGT9a37-tg?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=2EyaNt
