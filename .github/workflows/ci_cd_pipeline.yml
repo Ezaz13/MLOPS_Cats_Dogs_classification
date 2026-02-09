@@ -45,6 +45,12 @@ jobs:
         KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
 
+    - name: Debug - List Files After Training
+      if: always()
+      run: |
+        ls -R
+        find . -maxdepth 3 -not -path '*/.*'
+
     - name: Archive Model Performance Report
       if: always()
       uses: actions/upload-artifact@v4
@@ -58,6 +64,7 @@ jobs:
       with:
         name: mlflow-runs
         path: mlruns/
+        if-no-files-found: warn
 
     - name: Archive Logs
       if: always()
@@ -87,6 +94,7 @@ jobs:
       with:
         name: model-export
         path: models/model_export/
+        if-no-files-found: warn
 
   docker-build-push:
     needs: build-test-train
