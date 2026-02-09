@@ -347,10 +347,13 @@ def main():
             torch.save(model_data, model_path_dvc)
             
             # Save to export dir (for Docker/CI artifact)
-            model_path_export = model_export_dir / "best_model.pth"
-            torch.save(model_data, model_path_export)
+            import shutil
+            if model_export_dir.exists():
+                shutil.rmtree(model_export_dir)
             
-            logger.info(f"Best model saved to {model_path_dvc} and {model_path_export}")
+            mlflow.pytorch.save_model(model, path=str(model_export_dir))
+            
+            logger.info(f"Best model saved to {model_path_dvc} and exported to {model_export_dir}")
 
     logger.info("========== TRAINING PIPELINE COMPLETED ==========")
 
