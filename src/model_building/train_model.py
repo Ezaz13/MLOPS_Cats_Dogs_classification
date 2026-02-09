@@ -55,7 +55,7 @@ IS_CI = os.getenv("CI", "false").lower() == "true"
 
 IMAGE_SIZE = 224
 BATCH_SIZE = 32
-EPOCHS = 1 if IS_CI else 5
+EPOCHS = 1 if IS_CI else 1
 LR = 1e-4
 
 if IS_CI:
