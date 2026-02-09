@@ -1,14 +1,13 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: heart-disease-monitor
+  name: cats-dogs-monitor
   labels:
-    # This label ensures the Prometheus Operator (installed by Helm) picks up this monitor
     release: monitoring
 spec:
   selector:
     matchLabels:
-      app: heart-disease-app
+      app: cats-dogs-app
   endpoints:
   - port: http
     path: /metrics

@@ -1,39 +1,21 @@
 # Model Performance Report
 
-*Report generated on: 2026-01-01 15:58:27*
+*Report generated on: 2026-02-09 10:45:44*
 
-*MLflow Experiment: 'Heart Disease Prediction'*
+*MLflow Experiment: 'Cats vs Dogs CNN'*
 
-## Logistic Regression
+## Best Model: ResNet18
 
-- **MLflow Run ID**: `aa5ca55e76d64c9d8423b91878b5556c`
-- **Best Params**: `{'C': 0.1, 'solver': 'liblinear'}`
-- **CV ROC-AUC (Mean)**: 0.9009
-- **Test Accuracy**: 0.8689
-- **Precision**: 0.8125
-- **Recall**: 0.9286
-- **F1-Score**: 0.8667
-- **ROC-AUC**: 0.9481
+- **MLflow Run ID**: `3f60674f0c144b4c97cf2d2bee04c357`
+- **Device**: `cuda`
+- **Epochs**: 1
+- **Batch Size**: 32
+- **Learning Rate**: 0.0001
+- **Image Size**: 224
 
-## Random Forest
-
-- **MLflow Run ID**: `bbedffea32554c7fbcc6696a850067b7`
-- **Best Params**: `{'n_estimators': 100, 'max_depth': 10}`
-- **CV ROC-AUC (Mean)**: 0.8840
-- **Test Accuracy**: 0.8852
-- **Precision**: 0.8387
-- **Recall**: 0.9286
-- **F1-Score**: 0.8814
-- **ROC-AUC**: 0.9351
-
-## Gradient Boosting
-
-- **MLflow Run ID**: `568070c353554eedb74d9ff17d10a8cd`
-- **Best Params**: `{'n_estimators': 150, 'learning_rate': 0.05}`
-- **CV ROC-AUC (Mean)**: 0.8528
-- **Test Accuracy**: 0.8689
-- **Precision**: 0.8125
-- **Recall**: 0.9286
-- **F1-Score**: 0.8667
-- **ROC-AUC**: 0.9535
-
+### Metrics (Test Set - Final Epoch)
+- **Accuracy**: 0.9860
+- **Precision**: 0.9864
+- **Recall**: 0.9856
+- **F1-Score**: 0.9860
+- **ROC-AUC**: 0.9991
