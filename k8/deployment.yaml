@@ -16,7 +16,7 @@ spec:
       - name: regcred
       containers:
       - name: cats-dogs-app
-        image: ezaz13/cats-dogs-classification:v2
+        image: ezaz13/cats-dogs-classification:v4
 #        image: ezaz13/cats-dogs-app:latest v20
 
         imagePullPolicy: IfNotPresent
