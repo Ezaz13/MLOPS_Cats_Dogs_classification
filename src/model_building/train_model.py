@@ -227,7 +227,14 @@ def main():
     models_dir.mkdir(parents=True, exist_ok=True)
     report_path = PROJECT_ROOT / "src" / "model_building" / "model_performance_report.md"
 
-    mlflow.set_tracking_uri("sqlite:///mlflow.db")
+    # Use absolute path for MLflow database
+    mlflow_db_path = PROJECT_ROOT / "mlflow.db"
+    mlflow.set_tracking_uri(f"sqlite:///{mlflow_db_path}")
+    
+    # Ensure mlruns directory exists (though MLflow should create it)
+    mlruns_dir = PROJECT_ROOT / "mlruns"
+    mlruns_dir.mkdir(parents=True, exist_ok=True)
+    
     mlflow.set_experiment("Cats vs Dogs CNN")
     REGISTERED_MODEL_NAME = "CatsDogsCNN"
 

@@ -50,6 +50,7 @@ jobs:
       run: |
         ls -R
         find . -maxdepth 3 -not -path '*/.*'
+        python -c "import mlflow; print('MLflow Tracking URI:', mlflow.get_tracking_uri())"
 
     - name: Archive Model Performance Report
       if: always()
