@@ -26,6 +26,10 @@ app = Flask(__name__, template_folder="templates")
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
+from prometheus_flask_exporter import PrometheusMetrics
+metrics = PrometheusMetrics(app)
+metrics.info('app_info', 'Application info', version='1.0.0')
+
 # ------------------------------------------------------------------
 # CONFIGURATION
 # ------------------------------------------------------------------
