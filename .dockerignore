@@ -1,8 +1,40 @@
-.git
+# Data
+data/
+.dvc/
+.dvc/cache/
+
+# Virtual envs
+.venv/
+env/
+
+# Git
+.git/
+.gitignore
+
+# MLflow artifacts
+mlruns/
+mlflow.db
+
+# Logs
+logs/
+*.log
+
+# Python cache.git
 __pycache__/
 *.pyc
 .venv
 .env
 data/
-models/
+models/*
+!models/model_export
 tests/
+dvc_storage/
+.dvc/
+mlruns/
+logs/
+reports/
+screenshot/
+dvc_scripts/
+scripts/
+docs/
+notebooks/
