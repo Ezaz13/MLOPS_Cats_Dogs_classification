@@ -225,6 +225,11 @@ def main():
     # Create models directory for DVC output
     models_dir = PROJECT_ROOT / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create export directory for Docker/CI
+    model_export_dir = models_dir / "model_export"
+    model_export_dir.mkdir(parents=True, exist_ok=True)
+
     report_path = PROJECT_ROOT / "src" / "model_building" / "model_performance_report.md"
 
     # Use absolute path for MLflow database
@@ -328,17 +333,24 @@ def main():
         )
         logger.info("Best model registered in MLflow.")
         
-        # Save best model to local models directory for DVC
+        # Save best model to local models directory for DVC and Export
         if best_model_state is not None:
-            model_path = models_dir / "best_model.pth"
-            torch.save({
+            # Save to main models dir (for DVC if needed)
+            model_path_dvc = models_dir / "best_model.pth"
+            model_data = {
                 'model_state_dict': best_model_state,
                 'f1_score': best_f1,
                 'run_id': best_run_id,
                 'architecture': 'ResNet18',
                 'num_classes': len(classes),
-            }, model_path)
-            logger.info(f"Best model saved to {model_path}")
+            }
+            torch.save(model_data, model_path_dvc)
+            
+            # Save to export dir (for Docker/CI artifact)
+            model_path_export = model_export_dir / "best_model.pth"
+            torch.save(model_data, model_path_export)
+            
+            logger.info(f"Best model saved to {model_path_dvc} and {model_path_export}")
 
     logger.info("========== TRAINING PIPELINE COMPLETED ==========")
 
