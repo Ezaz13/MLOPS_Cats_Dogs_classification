@@ -182,3 +182,23 @@ jobs:
           kubectl get pods -o wide
           kubectl get services
           
+      - name: Wait for service readiness
+        run: |
+          kubectl wait --for=condition=available --timeout=300s deployment/cats-dogs-app
+          sleep 10
+
+      - name: Run Smoke Tests
+        run: |
+          # Port forward in background
+          kubectl port-forward service/cats-dogs-service 5000:5000 &
+          PID=$!
+          sleep 5
+          
+          # Run python smoke test
+          export SERVICE_URL="http://localhost:5000"
+          python tests/smoke_test.py
+          
+          # Kill port forward
+          kill $PID
+
+          

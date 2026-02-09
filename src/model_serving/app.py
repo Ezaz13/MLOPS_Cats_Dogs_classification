@@ -57,7 +57,7 @@ transform = transforms.Compose([
 # ------------------------------------------------------------------
 def initialize_app():
     """Initialize logger, device, and model"""
-    global device, logger
+    global device, model, logger
 
     # Force unbuffered output for Windows console visibility
     os.environ['PYTHONUNBUFFERED'] = '1'

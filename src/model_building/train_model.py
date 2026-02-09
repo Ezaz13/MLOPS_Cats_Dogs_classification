@@ -203,10 +203,15 @@ def evaluate(model, loader, phase):
     metrics = {
         "accuracy": accuracy_score(y_true, y_pred),
         "precision": precision_score(y_true, y_pred),
-        "recall": recall_score(y_true, y_pred),
-        "f1": f1_score(y_true, y_pred),
-        "roc_auc": roc_auc_score(y_true, y_prob),
+        "recall": recall_score(y_true, y_pred, zero_division=0),
+        "f1": f1_score(y_true, y_pred, zero_division=0),
     }
+
+    try:
+        metrics["roc_auc"] = roc_auc_score(y_true, y_prob)
+    except ValueError:
+        logger.warning(f"ROC AUC undefined (likely single class in {phase} batch). Setting to 0.0")
+        metrics["roc_auc"] = 0.0
 
     logger.info(f"{phase.upper()} METRICS: {metrics}")
     return metrics
