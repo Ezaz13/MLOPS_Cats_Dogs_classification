@@ -42,6 +42,8 @@ jobs:
         python src/data_pipeline_orchestrator/pipeline.py
       env:
         PYTHONIOENCODING: "utf-8"
+        KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+        KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
 
     - name: Archive Model Performance Report
       if: always()
