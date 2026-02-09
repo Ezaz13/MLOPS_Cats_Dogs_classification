@@ -235,7 +235,16 @@ def main():
     mlruns_dir = PROJECT_ROOT / "mlruns"
     mlruns_dir.mkdir(parents=True, exist_ok=True)
     
-    mlflow.set_experiment("Cats vs Dogs CNN")
+    experiment_name = "Cats vs Dogs CNN"
+    try:
+        experiment_id = mlflow.create_experiment(
+            name=experiment_name,
+            artifact_location=str(mlruns_dir.as_uri()) 
+        )
+    except mlflow.exceptions.MlflowException:
+        experiment_id = mlflow.get_experiment_by_name(experiment_name).experiment_id
+        
+    mlflow.set_experiment(experiment_id=experiment_id)
     REGISTERED_MODEL_NAME = "CatsDogsCNN"
 
     loaders, classes = get_dataloaders()
@@ -245,7 +254,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=LR)
     scaler = amp.GradScaler(enabled=(DEVICE.type == "cuda"))
 
-    best_f1 = 0.0
+    best_f1 = -1.0
     best_run_id = None
     best_model_state = None
 
