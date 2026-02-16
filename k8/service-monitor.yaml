@@ -2,13 +2,17 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: cats-dogs-monitor
+  namespace: monitoring
   labels:
-    release: monitoring
+    release: kube-prometheus-stack
 spec:
+  namespaceSelector:
+    matchNames:
+      - default
   selector:
     matchLabels:
       app: cats-dogs-app
   endpoints:
   - port: http
     path: /metrics
-    interval: 15s
+    interval: 10s
