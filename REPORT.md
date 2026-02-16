@@ -327,9 +327,7 @@ Managed via **GitHub Actions** (`.github/workflows/ci_cd_pipeline.yml`).
 
 ## 6. Link to Code Repository
 
-[https://github.com/Ezaz13/MLOPS_Cats_Dogs_classification.git](https://github.com/Ezaz13/MLOPS_Cats_Dogs_classification.git)
-
+https://github.com/Ezaz13/MLOPS_Cats_Dogs_classification.git
 
 ## 7. Link to Application Walkthrough Recording
-
-https://wilpbitspilaniacin0-my.sharepoint.com/:v:/g/personal/2024aa05083_wilp_bits-pilani_ac_in/IQByKQZjA01pTZDbOenZWesFAWihpS3Pcps-bkGT9a37-tg?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=2EyaNt
+https://wilpbitspilaniacin0-my.sharepoint.com/:v:/g/personal/2024aa05083_wilp_bits-pilani_ac_in/IQBYKzr_iTrITo2C0iiXpQMpAQFmPtSfN-VtvlFs1QJn9Vg?e=RAE8qm&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAiLCJyZWZlcnJhbFZpZXciOiJTaGFyZURpYWxvZy1MaW5rIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXcifX0%3D
