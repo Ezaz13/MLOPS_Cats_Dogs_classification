@@ -1,2 +1,0 @@
-total_files,valid_images,corrupt_images,invalid_format,class_counts
-24998,24998,0,0,"{'cat': 12499, 'dog': 12499}"
